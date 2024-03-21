@@ -3,15 +3,15 @@ import numpy as np
 import airsim
 import gym
 # from tasks import Shaping
-from jsbsim_simulator import Simulation
-from jsbsim_aircraft import Aircraft, cessna172P, ball, x8
+from src.jsbsim_simulator import Simulation
+from src.jsbsim_aircraft import Aircraft, cessna172P, ball, x8
 from debug_utils import *
 import jsbsim_properties as prp
 from simple_pid import PID
-from autopilot import X8Autopilot
-from navigation import WindEstimation
-from report_diagrams import ReportGraphs
-from image_processing import AirSimImages, SemanticImageSegmentation
+from src.autopilot import X8Autopilot
+from src.navigation import WindEstimation
+from src.report_diagrams import ReportGraphs
+from src.image_processing import AirSimImages, SemanticImageSegmentation
 from typing import Type, Tuple, Dict
 
 
@@ -177,6 +177,59 @@ class ClosedLoop:
         # self.debug_aero.get_pitch_values()
 
 
+class ClosedLoopNoAirsim(ClosedLoop):
+    def __init__(self, sim_time: float,
+                 display_graphics: bool = True,
+                 airspeed: float = 30.0,
+                 agent_interaction_frequency: float = 12.0,
+                 airsim_frequency_hz: float = 392.0,
+                 sim_frequency_hz: float = 240.0,
+                 aircraft: Aircraft = x8,
+                 init_conditions: bool = None,
+                 debug_level: int = 0):
+        super().__init__(sim_time, display_graphics, airspeed, agent_interaction_frequency, airsim_frequency_hz,
+                         sim_frequency_hz, aircraft, init_conditions, debug_level)
+        self.sim = Simulation(sim_frequency_hz, aircraft, init_conditions, debug_level)
+        self.ap = X8Autopilot(self.sim)
+        self.graph = DebugGraphs(self.sim)
+        self.report = ReportGraphs(self.sim)
+        self.debug_aero = DebugFDM(self.sim)
+        self.wind_estimate = WindEstimation(self.sim)
+        self.over = False
+
+    def simulation_loop(self, profile: tuple) -> None:
+        """
+        Runs the closed loop simulation and updates to airsim simulation based on the class level definitions
+
+        :param profile: a tuple of tuples of the aircraft's profile in (lat [m], long [m], alt [feet])
+        :return: None
+        """
+        update_num = int(self.sim_time * self.sim_frequency_hz)  # how many simulation steps to update the simulation
+        for i in range(update_num):
+            self.ap.airspeed_hold_w_throttle(self.airspeed)
+            self.get_graph_data()
+            if not self.over:
+                self.over = self.ap.arc_path(profile, 400)
+            if self.over:
+                print('over and out!')
+                break
+            self.sim.run()
+
+    def test_loop(self) -> None:
+        """
+        A loop to test the aircraft's flight dynamic model
+
+        :return: None
+        """
+
+        update_num = int(self.sim_time * self.sim_frequency_hz)  # how many simulation steps to update the simulation
+        for i in range(update_num):
+            if self.sim[prp.sim_time_s] >= 5.0:
+                self.ap.airspeed_hold_w_throttle(self.airspeed)
+                self.ap.altitude_hold(800)
+            self.get_graph_data()
+            self.sim.run()
+
 def run_simulator() -> None:
     """
     Runs the JSBSim and Airsim in the loop when executed as a script
@@ -212,10 +265,23 @@ def run_simulator_test() -> None:
     env.generate_figures()
     print('Simulation ended')
 
+def run_sim_no_airsim() -> None:
+    """
+    Runs JSBSim in the test loop when executed as a script to test the FDM
+    without the airsim graphics
+    :return: None
+    """
+    sim_frequency = 240
+    
+    # env = ClosedLoop(65.0, False, 30, 12, 24, sim_frequency)
+    # env.test_loop()
+    # env.generate_figures()
+    # print('Simulation ended')
 
 if __name__ == '__main__':
     run_simulator()
     # run_simulator_test()
+
 
 
 

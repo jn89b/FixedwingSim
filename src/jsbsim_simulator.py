@@ -1,10 +1,10 @@
 import jsbsim
-import airsim
+#import airsim
 import os
 import time
 from typing import Dict, Union
-import jsbsim_properties as prp
-from jsbsim_aircraft import Aircraft, cessna172P, x8
+import src.jsbsim_properties as prp
+from src.jsbsim_aircraft import Aircraft, cessna172P, x8
 import math
 
 """Initially based upon https://github.com/Gor-Ren/gym-jsbsim/blob/master/gym_jsbsim/simulation.py by Gordon Rennie"""
@@ -33,7 +33,7 @@ class Simulation:
         - 2 gives all calls within the C++ source code
     wall_clock_dt : bool
         activates a switch to speed up or slow down the simulation
-    client : object
+    client : object - REMOVED FROM FORK
         connection to airsim for visualization
 
     Methods:
@@ -58,9 +58,9 @@ class Simulation:
         returns the lat, long and altitude of JSBSim
     get_local_orientation()
         returns the euler angle orientation (roll, pitch, yaw) of JSBSim
-    airsim_connect()
+    airsim_connect() - REMOVED FROM FORK
         connect to a running instance of airsim
-    update_airsim()
+    update_airsim() - REMOVED FROM FORK
         updates the airsim client with the JSBSim calculated pose information
     close()
         closes the JSBSim fdm instance
@@ -73,21 +73,22 @@ class Simulation:
     """
 
     encoding = 'utf-8'
-    ROOT_DIR = os.path.abspath(r"c:\Users\quessy\Dev\jsbsim")
-
+    #ROOT_DIR = os.path.abspath(r"c:\Users\quessy\Dev\jsbsim")
+    
     def __init__(self,
                  sim_frequency_hz: float = 60.0,
                  aircraft: Aircraft = x8,
                  init_conditions: Dict[prp.Property, float] = None,
                  debug_level: int = 0):
-        self.fdm = jsbsim.FGFDMExec(root_dir=self.ROOT_DIR)
+        #self.fdm = jsbsim.FGFDMExec(root_dir=self.ROOT_DIR)
+        self.fdm = jsbsim.FGFDMExec(None) # will need to map this to root 
         self.fdm.set_debug_level(debug_level)
         self.sim_dt = 1.0 / sim_frequency_hz
         self.aircraft = aircraft
         self.initialise(self.sim_dt, self.aircraft.jsbsim_id, init_conditions)
         self.fdm.disable_output()
         self.wall_clock_dt = None
-        self.client = self.airsim_connect()
+        # self.client = self.airsim_connect()
 
     def __getitem__(self, prop: Union[prp.BoundedProperty, prp.Property]) -> float:
         return self.fdm[prop.name]
@@ -173,7 +174,7 @@ class Simulation:
         self.set_custom_initial_conditions(init_conditions=init_conditions)
         no_output_reset_mode = 1
         self.fdm.reset_to_initial_conditions(no_output_reset_mode)
-        self.update_airsim()
+        # self.update_airsim()
 
     def run(self) -> bool:
         """
@@ -221,47 +222,47 @@ class Simulation:
         orientation = [pitch, roll, yaw]
         return orientation
 
-    @staticmethod
-    def airsim_connect() -> airsim.VehicleClient:
-        """
-        Connect to airsim client, exposing the CV mode UE4 graphic environment.
+    # @staticmethod
+    # def airsim_connect() -> airsim.VehicleClient:
+    #     """
+    #     Connect to airsim client, exposing the CV mode UE4 graphic environment.
 
-        :return: the airsim client object
-        """
-        client = airsim.VehicleClient()
-        client.confirmConnection()
-        return client
+    #     :return: the airsim client object
+    #     """
+    #     client = airsim.VehicleClient()
+    #     client.confirmConnection()
+    #     return client
 
-    def update_airsim(self) -> None:
-        """
-        Update airsim with vehicle pose calculated by JSBSim
+    # def update_airsim(self) -> None:
+    #     """
+    #     Update airsim with vehicle pose calculated by JSBSim
 
-        :return: None
-        """
-        pose = self.client.simGetVehiclePose()
-        position = self.get_local_position()
-        pose.position.x_val = position[0]
-        pose.position.y_val = position[1]
-        pose.position.z_val = - position[2]
-        euler_angles = self.get_local_orientation()
-        pose.orientation = airsim.to_quaternion(euler_angles[0], euler_angles[1], euler_angles[2])
-        self.client.simSetVehiclePose(pose, False)  # boolean is whether to ignore collisions
+    #     :return: None
+    #     """
+    #     pose = self.client.simGetVehiclePose()
+    #     position = self.get_local_position()
+    #     pose.position.x_val = position[0]
+    #     pose.position.y_val = position[1]
+    #     pose.position.z_val = - position[2]
+    #     euler_angles = self.get_local_orientation()
+    #     pose.orientation = airsim.to_quaternion(euler_angles[0], euler_angles[1], euler_angles[2])
+    #     self.client.simSetVehiclePose(pose, False)  # boolean is whether to ignore collisions
 
-    def get_collision_info(self) -> airsim.VehicleClient.simGetCollisionInfo:
-        """
-        Gets collision info created by Airsim via the unreal engine
+    # def get_collision_info(self) -> airsim.VehicleClient.simGetCollisionInfo:
+    #     """
+    #     Gets collision info created by Airsim via the unreal engine
 
-        Get the sim collision info object from Airsim with the following properties:
-            - impact_point, where the aircraft collides with terrain
-            - normal, the vector perpendicular to the point where the vehicle collided with terrain
-            - position, the x, y, z position where the vehicle collided with the terrain
-            - penetration_depth, how far through the terrain the collision has propagated
-        The method: has_collided can also be called on the collision_info object to see whether or not a collision has
-        occurred, returns true if it has penetrated the terrain
-        :return: collision_info
-        """
-        collision_info = self.client.simGetCollisionInfo()
-        return collision_info
+    #     Get the sim collision info object from Airsim with the following properties:
+    #         - impact_point, where the aircraft collides with terrain
+    #         - normal, the vector perpendicular to the point where the vehicle collided with terrain
+    #         - position, the x, y, z position where the vehicle collided with the terrain
+    #         - penetration_depth, how far through the terrain the collision has propagated
+    #     The method: has_collided can also be called on the collision_info object to see whether or not a collision has
+    #     occurred, returns true if it has penetrated the terrain
+    #     :return: collision_info
+    #     """
+    #     collision_info = self.client.simGetCollisionInfo()
+    #     return collision_info
 
     def close(self) -> None:
         """

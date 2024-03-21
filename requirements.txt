@@ -16,7 +16,6 @@ GitPython==3.1.14
 google-auth>=1.27.1
 google-auth-oauthlib==0.4.3
 grpcio==1.36.1
-gym==0.18.0
 idna>=2.10
 joblib==1.0.1
 JSBSim>=1.1.4
@@ -59,8 +58,8 @@ tensorboard==2.4.1
 tensorboard-plugin-wit==1.8.0
 threadpoolctl==2.1.0
 # torch==1.8.0+cu111
-torchsummary==1.5.1
-torchvision>=0.2.2.post3
+# torchsummary==1.5.1
+# torchvision>=0.2.2.post3
 tornado>=4.5.3
 typing-extensions==3.7.4.3
 urllib3>=1.26.3
