@@ -48,8 +48,9 @@ class C172Autopilot:
         output = roll_pid(roll_error)
         self.sim[prp.aileron_cmd] = output
 
-    def level_hold(self, level):
-        error = level - self.sim[prp.altitude_sl_ft]
+    def level_hold(self, level_ft:float):
+        
+        error = level_ft - self.sim[prp.altitude_sl_ft]
         # Limit climb error to a maximum of 100'
         if error > 100:
             error = 100
@@ -163,20 +164,22 @@ class X8Autopilot:
         :param pitch_comm: commanded pitch attitude [radians]
         :return: None
         """
-        error = pitch_comm - self.sim[prp.pitch_rad]
+        error = pitch_comm - self.sim.get_property_value('attitude/pitch-rad') #self.sim[prp.pitch_rad]
         kp = 1.0
         ki = 0.0
         kd = 0.03
         controller = PID(kp, ki, 0.0)
         output = controller(error)
         # self.sim[prp.elevator_cmd] = output
-        rate = self.sim[prp.q_radps]
+        #rate = self.sim[prp.q_radps]
+        rate = self.sim.get_property_value('velocities/q-rad_sec')
         rate_controller = PID(kd, 0.0, 0.0)
         rate_output = rate_controller(rate)
         output = output+rate_output
-        self.sim[prp.elevator_cmd] = output
+        #self.sim[prp.elevator_cmd] = output
+        self.sim['fcs/elevator-cmd-norm'] = output
 
-    def roll_hold(self, roll_comm: float) -> None:
+    def roll_hold(self, roll_commd_rad: float) -> None:
         """
         Maintains a commanded roll attitude [radians] using a PID controller
 
@@ -184,20 +187,23 @@ class X8Autopilot:
         :return: None
         """
         # Nichols Ziegler tuning Pcr = 0.29, Kcr = 0.0380, PID chosen
-        error = roll_comm - self.sim[prp.roll_rad]
+        #error = roll_comm - self.sim[prp.roll_rad]
+        error = roll_commd_rad - self.sim.get_property_value('attitude/phi-rad')
         kp = 0.20
         ki = kp*0.0  # tbd, should use rlocus plot and pole-placement
         kd = 0.089
         controller = PID(kp, ki, 0.0)
         output = controller(error)
-        rate = self.sim[prp.p_radps]
+        #rate = self.sim[prp.p_radps]
+        rate = self.sim.get_property_value('velocities/p-rad_sec')
         rate_controller = PID(kd, 0.0, 0.0)
         rate_output = rate_controller(rate)
         output = -output+rate_output
         # print(output)
-        self.sim[prp.aileron_cmd] = output
+        # self.sim[prp.aileron_cmd] = output
+        self.sim['fcs/aileron-cmd-norm'] = output
 
-    def heading_hold(self, heading_comm: float) -> None:
+    def heading_hold(self, error:float) -> None:
         """
         Maintains a commanded heading [degrees] using a PI controller
 
@@ -205,7 +211,10 @@ class X8Autopilot:
         :return: None
         """
         # Attempted Nichols-Ziegler with Pcr = 0.048, Kcr=1.74, lead to a lot of overshoot
-        error = heading_comm - self.sim[prp.heading_deg]
+        # error = heading_comm_dg - self.sim[prp.heading_deg]
+        #print("attitude/psi-true-deg", self.sim.get_property_value('attitude/heading-true-deg'))
+        #error = heading_comm_dg - self.sim.get_property_value('attitude/psi-true-deg')
+        print("error", error)
         # Ensure the aircraft always turns the shortest way round
         if error < -180:
             error = error + 360
@@ -250,8 +259,8 @@ class X8Autopilot:
         :param altitude_comm: demanded altitude [feet]
         :return: None
         """
-
-        error = altitude_comm - self.sim[prp.altitude_sl_ft]
+        #print('altitude command: ', altitude_comm)
+        error = altitude_comm - self.sim.get_property_value("position/h-sl-ft")
         # print('error: ', error)
         kp = 0.1
         ki = 0.6
