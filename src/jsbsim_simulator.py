@@ -5,6 +5,7 @@ import time
 from typing import Dict, Union
 import src.jsbsim_properties as prp
 from src.jsbsim_aircraft import Aircraft, cessna172P, x8
+from src.conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
 import math
 
 """Initially based upon https://github.com/Gor-Ren/gym-jsbsim/blob/master/gym_jsbsim/simulation.py by Gordon Rennie"""
@@ -78,14 +79,18 @@ class Simulation:
     def __init__(self,
                  sim_frequency_hz: float = 60.0,
                  aircraft: Aircraft = x8,
-                 init_conditions: Dict[prp.Property, float] = None,
+                 init_conditions:Dict = None,
+                 return_metric_units: bool = True,
                  debug_level: int = 0):
         #self.fdm = jsbsim.FGFDMExec(root_dir=self.ROOT_DIR)
         self.fdm = jsbsim.FGFDMExec(None) # will need to map this to root 
         self.fdm.set_debug_level(debug_level)
+        self.sim_frequency_hz = sim_frequency_hz
         self.sim_dt = 1.0 / sim_frequency_hz
         self.aircraft = aircraft
-        self.initialise(self.sim_dt, self.aircraft.jsbsim_id, init_conditions)
+        self.init_conditions = init_conditions
+        self.return_metric_units = return_metric_units
+        self.initialise(self.sim_dt, self.aircraft.jsbsim_id, self.init_conditions)
         self.fdm.disable_output()
         self.wall_clock_dt = None
         # self.client = self.airsim_connect()
@@ -137,31 +142,39 @@ class Simulation:
         :param init_conditions: initial simulation conditions
         :return: None
         """
-        if init_conditions is not None:
-            ic_file = 'minimal_ic.xml'
-        else:
-            ic_file = 'basic_ic.xml'
+        # if init_conditions is not None:
+        #     ic_file = 'minimal_ic.xml'
+        # else:
+        #     ic_file = 'basic_ic.xml'
 
-        ic_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ic_file)
-        self.fdm.load_ic(ic_path, useStoredPath=False)
+        # ic_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ic_file)
+        # self.fdm.load_ic(ic_path, useStoredPath=False)
+        for k, v in init_conditions.items():
+            self.fdm[k] = v
+            
         self.load_model(model_name)
         self.fdm.set_dt(dt)
-        self.set_custom_initial_conditions(init_conditions)
+        # self.set_custom_initial_conditions(init_conditions)
 
         success = self.fdm.run_ic()
         if not success:
             raise RuntimeError('JSBSim failed to initialise simulation conditions.')
+        else:
+            print('JSBSim successfully initialised')
 
-    def set_custom_initial_conditions(self, init_conditions: Dict['prp.Property', float] = None) -> None:
+    def set_custom_initial_conditions(self, init_conditions: dict = None) -> None:
         """
         Set initial conditions different to what is found in the <name-ic.xml> file used
 
         :param init_conditions: the initial simulation conditions, defined based on prp JSBSim properties
         :return: None
         """
-        if init_conditions is not None:
-            for prop, value in init_conditions.items():
-                self[prop] = value
+        # if init_conditions is not None:
+        #     for prop, value in init_conditions.items():
+        #         self[prop] = value
+        if init_conditions is None:
+            for k,v in self.init_conditions.items():
+                self.fdm[k] = v
 
     def reinitialise(self, init_conditions: Dict['prp.Property', float] = None) -> None:
         """
@@ -199,28 +212,53 @@ class Simulation:
     def get_local_position(self) -> list:
         """
         Get the local absolute position from the simulation start point
-
         :return: position [lat, long, alt]
         """
         # lat = self[prp.lat_travel_m]
         # long = self[prp.lng_travel_m]
         lat = 111320 * self[prp.lat_geod_deg]
-        long = 40075000 * self[prp.lng_geoc_deg] * math.cos(self[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
+        lon = 40075000 * self[prp.lng_geoc_deg] * math.cos(self[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
         alt = self[prp.altitude_sl_ft]
-        position = [lat, long, alt]
+        
+        if self.return_metric_units:
+            lat = feet_to_meters(lat)
+            lon = feet_to_meters(lon)
+            alt = feet_to_meters(alt)
+            
+        position = [lat, lon, alt]
         return position
 
-    def get_local_orientation(self):
+    def get_local_orientation(self) -> list:
         """
         Get the orientation of the vehicle
 
         :return: orientation [pitch, roll, yaw]
-        """
+        # """
         pitch = self[prp.pitch_rad]
         roll = self[prp.roll_rad]
-        yaw = self[prp.heading_deg] * (math.pi / 180)
-        orientation = [pitch, roll, yaw]
+        # yaw = self[prp.heading_deg] * (math.pi / 180)
+        yaw = self[prp.heading_rad]
+        # yaw = self.fdm.get_property_value("attitude/heading-true-rad")
+        #self[prp.heading_rad]
+        orientation = [roll, pitch, yaw]
         return orientation
+    
+    def get_states(self) -> dict:
+        """
+        Gets the current state of the aircraft
+        """
+        position = self.get_local_position()
+        orientation = self.get_local_orientation()
+        states = {
+            'x': position[0],
+            'y': position[1],
+            'z': position[2],
+            'phi': orientation[0],
+            'theta': orientation[1],
+            'psi': orientation[2]
+        }
+        
+        return states
 
     # @staticmethod
     # def airsim_connect() -> airsim.VehicleClient:
@@ -290,11 +328,11 @@ class Simulation:
         :return:
         """
         self[prp.throttle_cmd] = throttle_cmd
-        self[prp.mixture_cmd] = mixture_cmd
+        # self[prp.mixture_cmd] = mixture_cmd
 
         try:
             self[prp.throttle_1_cmd] = throttle_cmd
-            self[prp.mixture_1_cmd] = mixture_cmd
+            #self[prp.mixture_1_cmd] = mixture_cmd
         except KeyError:
             pass  # must be single-control aircraft
 

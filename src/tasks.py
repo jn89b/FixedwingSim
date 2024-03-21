@@ -498,5 +498,3 @@ class LandingTask(FlightTask):
         if collision_object in safe_objects:
             safe_area = True
         return safe_area
-
-

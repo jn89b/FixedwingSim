@@ -35,7 +35,6 @@ init_state_dict = {
     "ic/p-rad_sec": 0.0,
     "ic/q-rad_sec": 0.0,
     "ic/r-rad_sec": 0.0,
-    ''
     "ic/h-sl-ft": meters_to_feet(50),
     "ic/long-gc-deg": 0.0,
     "ic/lat-gc-deg": 0.0,
@@ -72,9 +71,10 @@ for i in range(0, n_steps):
     #autopilot.level_hold()
     fdm.run()
     error_heading_dg = goal_heading - current_heading_dg
-    autopilot.altitude_hold(meters_to_feet(65))
-    # autopilot.roll_hold(np.deg2rad(0))
+    # autopilot.altitude_hold(meters_to_feet(65))
+    autopilot.roll_hold(np.deg2rad(10))
     autopilot.heading_hold(error_heading_dg)
+    autopilot.pitch_hold(np.deg2rad(2))
     altitude_m = feet_to_meters(fdm.get_property_value("position/h-sl-ft"))
     print(altitude_m)
     current_time = fdm.get_property_value("simulation/sim-time-sec")
@@ -84,15 +84,15 @@ for i in range(0, n_steps):
     altitude_history.append(altitude_m)
     roll_history.append(fdm.get_property_value("attitude/phi-rad"))
     heading_history.append(fdm.get_property_value("attitude/heading-true-rad"))
-    #heading_history.append(fdm.get_property_value("attitude/psi-true-rad"))
     time_history.append(current_time - start_time)
     
 
 import matplotlib.pyplot as plt
 
-fig,ax = plt.subplots(3,1)
+fig,ax = plt.subplots(4,1)
 ax[0].plot(time_history, altitude_history)
 ax[1].plot(time_history, np.rad2deg(roll_history))
 ax[2].plot(time_history, np.rad2deg(heading_history))
+
 # plt.plot(time_history, altitude_history)
 plt.show()
