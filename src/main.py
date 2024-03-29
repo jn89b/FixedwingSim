@@ -1,7 +1,7 @@
 from abc import ABC
 import numpy as np
-import airsim
-import gym
+#import airsim
+# import gym
 # from tasks import Shaping
 from src.jsbsim_simulator import FlightDynamics
 from src.jsbsim_aircraft import Aircraft, cessna172P, ball, x8
