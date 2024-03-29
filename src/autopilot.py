@@ -1,7 +1,7 @@
 from simple_pid import PID
 import numpy as np
 import src.jsbsim_properties as prp
-from src.jsbsim_simulator import Simulation
+from src.jsbsim_simulator import FlightDynamics
 from scipy import interpolate
 import math
 from src.navigation import LocalNavigation

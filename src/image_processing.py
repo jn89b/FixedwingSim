@@ -2,7 +2,7 @@ import airsim
 import numpy as np
 # import cv2 as cv
 import torch
-from jsbsim_simulator import Simulation
+from jsbsim_simulator import FlightDynamics
 from PIL import Image
 from torchvision import transforms
 import matplotlib.pyplot as plt
@@ -20,7 +20,7 @@ class AirSimImages:
         represents the combined jsbsim and airsim instance
 
     """
-    def __init__(self, sim: Simulation):
+    def __init__(self, sim: FlightDynamics):
         self.sim = sim
 
     def get_np_image(self, image_type) -> np.array:
@@ -73,7 +73,7 @@ class SemanticImageSegmentation(AirSimImages):
     Classify segments of an image based on the content observed within each segment
     """
 
-    def __init__(self, sim: Simulation) -> None:
+    def __init__(self, sim: FlightDynamics) -> None:
         super().__init__(sim)  # access all image methods contained in AirSimImages
         self.model = self.load_model()
         self.input_image = self.get_np_image(image_type=airsim.ImageType.Scene)

@@ -3,7 +3,7 @@ import numpy as np
 import airsim
 import gym
 # from tasks import Shaping
-from jsbsim_simulator import Simulation
+from jsbsim_simulator import FlightDynamics
 from jsbsim_aircraft import Aircraft, cessna172P, ball, x8
 from debug_utils import *
 import jsbsim_properties as prp
@@ -66,7 +66,7 @@ class Environment(gym.Env):
                  sim_frequency_hz: float = 240.0):
         if agent_frequency_hz > sim_frequency_hz:
             raise ValueError('agent frequency must be <= simulation frequency')
-        self.sim: Simulation = None
+        self.sim: FlightDynamics = None
         self.sim_frequency_hz = sim_frequency_hz
         self.sim_steps_per_agent_step: int = int(sim_frequency_hz // agent_frequency_hz)
         self.sim_steps_per_graphic_step: int = int(sim_frequency_hz // graphic_frequency_hz)
@@ -123,7 +123,7 @@ class Environment(gym.Env):
         return np.array(state)
 
     @staticmethod
-    def _init_new_sim(dt, aircraft, initial_conditions) -> Simulation:
+    def _init_new_sim(dt, aircraft, initial_conditions) -> FlightDynamics:
         """
         Start a new instance of the Simulation class
 
@@ -132,7 +132,7 @@ class Environment(gym.Env):
         :param initial_conditions: the aircraft's initial simulation conditions
         :return: a Simulation object, class instance
         """
-        return Simulation(sim_frequency_hz=dt,
+        return FlightDynamics(sim_frequency_hz=dt,
                           aircraft=aircraft,
                           init_conditions=initial_conditions)
 

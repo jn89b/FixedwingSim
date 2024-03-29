@@ -3,7 +3,7 @@ import numpy as np
 import airsim
 import gym
 # from tasks import Shaping
-from src.jsbsim_simulator import Simulation
+from src.jsbsim_simulator import FlightDynamics
 from src.jsbsim_aircraft import Aircraft, cessna172P, ball, x8
 from debug_utils import *
 import jsbsim_properties as prp
@@ -67,7 +67,7 @@ class ClosedLoop:
         self.display_graphics = display_graphics
         self.airspeed = airspeed
         self.aircraft = aircraft
-        self.sim: Simulation = Simulation(sim_frequency_hz, aircraft, init_conditions, debug_level)
+        self.sim: FlightDynamics = FlightDynamics(sim_frequency_hz, aircraft, init_conditions, debug_level)
         self.agent_interaction_frequency = agent_interaction_frequency
         self.sim_frequency_hz = sim_frequency_hz
         self.airsim_frequency_hz = airsim_frequency_hz
@@ -189,7 +189,7 @@ class ClosedLoopNoAirsim(ClosedLoop):
                  debug_level: int = 0):
         super().__init__(sim_time, display_graphics, airspeed, agent_interaction_frequency, airsim_frequency_hz,
                          sim_frequency_hz, aircraft, init_conditions, debug_level)
-        self.sim = Simulation(sim_frequency_hz, aircraft, init_conditions, debug_level)
+        self.sim = FlightDynamics(sim_frequency_hz, aircraft, init_conditions, debug_level)
         self.ap = X8Autopilot(self.sim)
         self.graph = DebugGraphs(self.sim)
         self.report = ReportGraphs(self.sim)

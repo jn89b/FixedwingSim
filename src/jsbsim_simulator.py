@@ -11,7 +11,7 @@ import math
 """Initially based upon https://github.com/Gor-Ren/gym-jsbsim/blob/master/gym_jsbsim/simulation.py by Gordon Rennie"""
 
 
-class Simulation:
+class FlightDynamics:
     """
     The core JSBSim simulation class
 

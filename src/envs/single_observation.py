@@ -5,7 +5,7 @@ from gym import spaces, logger
 from gym.utils import seeding
 import numpy as np
 from jsbsim_aircraft import Aircraft, x8
-from jsbsim_simulator import Simulation
+from jsbsim_simulator import FlightDynamics
 from autopilot import X8Autopilot
 from image_processing import AirSimImages
 
@@ -52,7 +52,7 @@ class SingleObservation(gym.Env):
         self.aircraft: Aircraft = x8
         self.init_conditions = None
         self.debug_level: int = 0
-        self.sim: Simulation = Simulation(self.jsbsim_frequency_hz,
+        self.sim: FlightDynamics = FlightDynamics(self.jsbsim_frequency_hz,
                                           self.aircraft,
                                           self.init_conditions,
                                           self.debug_level)

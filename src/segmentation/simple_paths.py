@@ -1,5 +1,5 @@
 import airsim
-from jsbsim_simulator import Simulation
+from jsbsim_simulator import FlightDynamics
 from jsbsim_aircraft import Aircraft, cessna172P, ball, x8
 from debug_utils import *
 import navigation as navigation
@@ -65,7 +65,7 @@ class ImagePath:
         self.display_graphics = display_graphics
         self.airspeed = airspeed
         self.aircraft = aircraft
-        self.sim: Simulation = Simulation(sim_frequency_hz, aircraft, init_conditions, debug_level)
+        self.sim: FlightDynamics = FlightDynamics(sim_frequency_hz, aircraft, init_conditions, debug_level)
         self.agent_interaction_frequency = agent_interaction_frequency
         self.sim_frequency_hz = sim_frequency_hz
         self.airsim_frequency_hz = airsim_frequency_hz

@@ -8,7 +8,7 @@ import numpy as np
 import jsbsim_properties as prp
 from abc import ABC, abstractmethod
 from collections import namedtuple
-from jsbsim_simulator import Simulation
+from jsbsim_simulator import FlightDynamics
 from jsbsim_properties import BoundedProperty, Property
 from jsbsim_aircraft import Aircraft
 from typing import Optional, Sequence, Dict, Tuple, NamedTuple, Type
@@ -45,7 +45,7 @@ class Task(ABC):
     """
 
     @abstractmethod
-    def task_step(self, sim: Simulation, action: Sequence[float],
+    def task_step(self, sim: FlightDynamics, action: Sequence[float],
                   sim_steps_per_agent_step: float, sim_steps_per_graphic_step: float) \
             -> Tuple[np.ndarray, float, bool, Dict]:
         """
@@ -67,7 +67,7 @@ class Task(ABC):
         """
 
     @abstractmethod
-    def observe_first_state(self, sim: Simulation) -> np.ndarray:
+    def observe_first_state(self, sim: FlightDynamics) -> np.ndarray:
         """
         Initialize any state/controls and get first state observation from reset sim
 
@@ -164,7 +164,7 @@ class FlightTask(Task, ABC):
         ...
 
     @abstractmethod
-    def _is_terminal(self, sim: Simulation) -> bool:
+    def _is_terminal(self, sim: FlightDynamics) -> bool:
         """
         Determines whether the current episode should terminate.
 
@@ -183,7 +183,7 @@ class FlightTask(Task, ABC):
         ...
 
     @abstractmethod
-    def set_terminal_reward(self, sim: Simulation) -> float:
+    def set_terminal_reward(self, sim: FlightDynamics) -> float:
         """
         Set the reward generated at the end of the episode
 
@@ -201,7 +201,7 @@ class FlightTask(Task, ABC):
         legal_attribute_names = [prop.get_legal_name() for prop in self.state_variables]
         self.State = namedtuple('State', legal_attribute_names)
 
-    def task_step(self, sim: Simulation, action: Sequence[float],
+    def task_step(self, sim: FlightDynamics, action: Sequence[float],
                   sim_steps_per_agent_step: int, sim_steps_per_graphic_step: int, display_graphics: bool = True) \
             -> Tuple[np.ndarray, float, bool, Dict]:
         """
@@ -244,13 +244,13 @@ class FlightTask(Task, ABC):
         info = {'reward': reward}
         return state, reward, done, info
 
-    def observe_first_state(self, sim: Simulation) -> np.ndarray:
+    def observe_first_state(self, sim: FlightDynamics) -> np.ndarray:
         self._init_new_episode(sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
         self.last_state = state
         return state
 
-    def _init_new_episode(self, sim: Simulation) -> None:
+    def _init_new_episode(self, sim: FlightDynamics) -> None:
         """
         This method is called at the start of every episode. It is used to set
         the value of any controls or environment properties not already defined
@@ -330,7 +330,7 @@ class LandingTask(FlightTask):
         self.state_variables = FlightTask.base_state_variables
         super().__init__()
 
-    def _is_terminal(self, sim: Simulation) -> bool:
+    def _is_terminal(self, sim: FlightDynamics) -> bool:
         """
         Overrides the abstract method in FlightTask with the terminating conditions, terminates the episode
         when the aircraft collides with the ground
@@ -353,7 +353,7 @@ class LandingTask(FlightTask):
         reward = 0.0
         return reward
 
-    def set_terminal_reward(self, sim: Simulation) -> float:
+    def set_terminal_reward(self, sim: FlightDynamics) -> float:
         """
         Calculate the reward at the end of an episode
 
@@ -370,7 +370,7 @@ class LandingTask(FlightTask):
             reward = self.safe_landing_reward(sim)
             return reward
 
-    def safe_landing_reward(self, sim: Simulation) -> float:
+    def safe_landing_reward(self, sim: FlightDynamics) -> float:
         """
         Calculate the reward generated when landing in a sensible location
 
@@ -442,11 +442,11 @@ class LandingTask(FlightTask):
         else:
             ValueError('reward_sharpness must be > 0')
 
-    def _init_new_episode(self, sim: Simulation):
+    def _init_new_episode(self, sim: FlightDynamics):
         super()._init_new_episode(sim)
 
     @staticmethod
-    def _crash_test(sim: Simulation) -> bool:
+    def _crash_test(sim: FlightDynamics) -> bool:
         """
         Check if the aircraft crashed by landing out of limits
 
@@ -468,7 +468,7 @@ class LandingTask(FlightTask):
         return crash
 
     @staticmethod
-    def _restricted_area(sim: Simulation, restricted_objects: tuple) -> bool:
+    def _restricted_area(sim: FlightDynamics, restricted_objects: tuple) -> bool:
         """
         Check if the aircraft landed within a restricted zone
 
@@ -484,7 +484,7 @@ class LandingTask(FlightTask):
         return restricted_area
 
     @staticmethod
-    def _safe_zone(sim: Simulation, safe_objects: tuple) -> bool:
+    def _safe_zone(sim: FlightDynamics, safe_objects: tuple) -> bool:
         """
         Check if the aircraft landed within a safe zone
 

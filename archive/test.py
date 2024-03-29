@@ -1,7 +1,7 @@
 import jsbsim
 import numpy as np
 from src.autopilot import X8Autopilot
-from src.jsbsim_simulator import Simulation
+from src.jsbsim_simulator import FlightDynamics
 from src.jsbsim_aircraft import x8
 
 
@@ -66,6 +66,7 @@ t_sim_end = 10
 goal_heading = 80
 n_steps = int(t_sim_end / dt)
 current_heading_dg = fdm.get_property_value("attitude/heading-true-rad")
+
 for i in range(0, n_steps):
     #do a level hold 
     #autopilot.level_hold()
@@ -76,10 +77,10 @@ for i in range(0, n_steps):
     autopilot.heading_hold(error_heading_dg)
     autopilot.pitch_hold(np.deg2rad(2))
     altitude_m = feet_to_meters(fdm.get_property_value("position/h-sl-ft"))
-    print(altitude_m)
+    # print(altitude_m)
     current_time = fdm.get_property_value("simulation/sim-time-sec")
-    print(current_time - start_time)
-    print("\n")
+    # print(current_time - start_time)
+    # print("\n")
     current_heading_dg = np.rad2deg(fdm.get_property_value("attitude/heading-true-rad"))
     altitude_history.append(altitude_m)
     roll_history.append(fdm.get_property_value("attitude/phi-rad"))
