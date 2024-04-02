@@ -2,15 +2,15 @@ import jsbsim
 import numpy as np
 import matplotlib.pyplot as plt
 from guidance_control.autopilot import X8Autopilot
-from jsbim_backend.simulator import FlightDynamics
-from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
+from jsbsim_backend.simulator import FlightDynamics
+from conversions import feet_to_meters, meters_to_feet, ktas_to_mps, mps_to_ktas
 
 """
 Trying to figure out how to interface with the JSBSim API
 """
 
 init_state_dict = {
-    "ic/u-fps": mps_to_knots(25),
+    "ic/u-fps": meters_to_feet(20),
     "ic/v-fps": 0.0,
     "ic/w-fps": 0.0,
     "ic/p-rad_sec": 0.0,
@@ -19,7 +19,7 @@ init_state_dict = {
     "ic/h-sl-ft": meters_to_feet(50),
     "ic/long-gc-deg": 0.0,
     "ic/lat-gc-deg": 0.0,
-    "ic/psi-true-deg": 15,
+    "ic/psi-true-deg": 20,
     "ic/theta-deg": 0.0,
     "ic/phi-deg": 0.0,
     "ic/alpha-deg": 0.0,
@@ -52,6 +52,7 @@ psi_history = []
 
 time_history = []
 start_time = sim.get_time()
+airspeed_history = []
 
 for i in range(N):
     current_pos = sim.get_local_position()
@@ -65,7 +66,10 @@ for i in range(N):
     theta_history.append(current_orientation[1])
     psi_history.append(current_orientation[2])
     time_history.append(sim.get_time() - start_time)
+    airspeed_history.append((states['airspeed']))
+    autopilot.altitude_hold(feet_to_meters(50))
     autopilot.heading_hold(90)
+    autopilot.airspeed_hold_w_throttle(mps_to_ktas(25))
     sim.run()
 
 #3D plot
@@ -81,5 +85,9 @@ ax[2].plot(time_history, np.rad2deg(psi_history))
 ax[0].set_ylabel('Roll [deg]')
 ax[1].set_ylabel('Pitch [deg]')
 ax[2].set_ylabel('Yaw [deg]')
+
+
+fig, ax = plt.subplots()
+ax.plot(time_history, airspeed_history)
 
 plt.show()

@@ -3,12 +3,13 @@ import math
 import gymnasium
 import numpy as np
 
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 from gymnasium import spaces, logger
 from gymnasium.utils import seeding
 
-from jsbim_backend.aircraft import Aircraft, x8
-from jsbim_backend.simulator import FlightDynamics
+from jsbsim_backend.aircraft import Aircraft, x8
+from jsbsim_backend.simulator import FlightDynamics
+from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
 from sim_interface import CLSimInterface, OpenGymInterface
 
 from guidance_control.autopilot import X8Autopilot
@@ -18,156 +19,209 @@ from guidance_control.autopilot import X8Autopilot
 class UAMEnv(gymnasium.Env):
     def __init__(self, 
                  backend_interface:OpenGymInterface=None,
+                 control_constraints:dict=None,
+                 state_constraints:dict=None,
                  render_mode:str=None,
                  render_fps:int=7, 
                  use_random_start:bool=False) -> None:
         super(UAMEnv, self).__init__()
         
         self.backend_interface = backend_interface
+        self.constraints = control_constraints
+        self.state_constraints = state_constraints
+        self.action_space = self.init_attitude_action_space()
+        
+        self.ego_obs_space = self.init_ego_observation()
+        self.observation_space = spaces.Dict(
+            {
+                "ego": self.ego_obs_space
+            }
+        )
+        
+    def init_attitude_action_space(self) -> spaces.Box:
+        """
+        For the first iteration, use continuous action space 
+        control roll, pitch, yaw, throttle feed to low level controller
+        
+        NOTE for the yaw/heading command it must be in degrees for the 
+        autopilot to understand it.
+        """
+        low_action = []
+        high_action = []
+        
+        for k,v in self.constraints.items():
+            if 'max' in k:
+                high_action.append(1)
+            elif 'min' in k:
+                low_action.append(-1)
+        
+        action_space = spaces.Box(low=np.array(low_action),
+                                        high=np.array(high_action),
+                                        dtype=np.float32)
+        
+        
+        return action_space
+    
+        
+    def init_ego_observation(self) -> spaces.Dict:
+        """
+        State orders are as follows:
+        x, (east) (m)
+        y, (north) (m)
+        z, (up) (m)
+        roll, (rad)
+        pitch, (rad)
+        yaw, (rad)
+        airspeed (m/s)
+        """
+        high_obs = []
+        low_obs = []
+        
+        high_obs.append(self.state_constraints['max_x'])
+        low_obs.append(self.state_constraints['min_x'])
+        
+        high_obs.append(self.state_constraints['max_y'])
+        low_obs.append(self.state_constraints['min_y'])
+        
+        high_obs.append(self.state_constraints['max_z'])
+        low_obs.append(self.state_constraints['min_z'])
+        
+        high_obs.append(self.state_constraints['max_phi'])
+        low_obs.append(self.state_constraints['min_phi'])
+        
+        high_obs.append(self.state_constraints['max_theta'])
+        low_obs.append(self.state_constraints['min_theta'])
+        
+        high_obs.append(self.state_constraints['max_psi'])
+        low_obs.append(self.state_constraints['min_psi'])
+        
+        high_obs.append(self.state_constraints['max_air_speed'])
+        low_obs.append(self.state_constraints['min_air_speed'])
+        
+        obs_space = spaces.Box(low=np.array(low_obs),
+                                            high=np.array(high_obs),
+                                            dtype=np.float32)
+            
+        return obs_space
+    
+    def norm_map_to_real(self, norm_max:float, norm_min:float, norm_val:float) -> float:
+        return norm_min + (norm_max - norm_min) * (norm_val + 1) / 2
+    
+    def map_normalized_action_to_real_action(self, action:np.ndarray) -> np.ndarray:
+        """
+        actions are normalized to [-1, 1] and must be mapped to the
+        constraints of the aircraft
+        Action order: roll, pitch, yaw, throttle
+        """
+        roll_norm = action[0]
+        pitch_norm = action[1]
+        yaw_norm = action[2]
+        throttle_norm = action[3]
+        
+        roll_cmd = self.norm_map_to_real(self.constraints['max_roll'],
+                                            self.constraints['min_roll'],
+                                            roll_norm)
+        
+        pitch_cmd = self.norm_map_to_real(self.constraints['max_pitch'],
+                                            self.constraints['min_pitch'],
+                                            pitch_norm)
+        
+        yaw_cmd = self.norm_map_to_real(self.constraints['max_yaw'],
+                                            self.constraints['min_yaw'],
+                                            yaw_norm)
+        
+        throttle_cmd = self.norm_map_to_real(self.constraints['max_throttle'],
+                                            self.constraints['min_throttle'],
+                                            throttle_norm)
+        
+        return np.array([roll_cmd, pitch_cmd, yaw_cmd, throttle_cmd])
         
     def __get_observation(self) -> dict:
-        pass
+        return {"ego": self.backend_interface.get_observation()}
         
     def __get_info(self) -> dict:
-        pass
+        return {}
         
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
-        pass
+        
+        reward = 0
+        done = False
+        
+        real_action = self.map_normalized_action_to_real_action(action)
+        
+        self.backend_interface.set_commands(real_action)
+        self.backend_interface.run_backend()
+        
+        observation = self.__get_observation()
+        info = self.__get_info()
+        
+        return observation, reward, done, False, info
     
-    def reset(self) -> None:
-        pass
+    def reset(self, seed=None) -> Any:
+        
+        if seed is not None:
+            self.np_random, seed = seeding.np_random(seed)
+            #randomize the initial conditions
+            #this needs to be refactored
+            min_vel = self.state_constraints['min_air_speed']
+            max_vel = self.state_constraints['max_air_speed']
+            
+            min_heading = self.state_constraints['min_psi']
+            max_heading = self.state_constraints['max_psi']
+            
+            random_vel = mps_to_knots(np.random.uniform(
+                min_vel, max_vel))
+            
+            random_heading = np.random.uniform(min_heading, 
+                                                max_heading)
+            
+            random_roll = np.random.uniform(
+                self.state_constraints['min_phi'],
+                self.state_constraints['max_phi'])
+            
+            random_pitch = np.random.uniform(
+                self.state_constraints['min_theta'],
+                self.state_constraints['max_theta'])
+            
+            #move lat and lon to random position within a small radius
+            random_lat_dg = np.random.uniform(-0.0001, 0.0001)
+            random_lon_dg = np.random.uniform(-0.0001, 0.0001)
+            random_alt_ft = meters_to_feet(np.random.uniform(40, 80))
+            
+            init_state_dict = {
+                "ic/u-fps": random_vel,
+                "ic/v-fps": 0.0,
+                "ic/w-fps": 0.0,
+                "ic/p-rad_sec": 0.0,
+                "ic/q-rad_sec": 0.0,
+                "ic/r-rad_sec": 0.0,
+                "ic/h-sl-ft": random_alt_ft,
+                "ic/long-gc-deg": random_lon_dg,
+                "ic/lat-gc-deg": random_lat_dg,
+                "ic/psi-true-deg": random_heading,
+                "ic/theta-deg": random_pitch,
+                "ic/phi-deg": random_roll,
+                "ic/alpha-deg": 0.0,
+                "ic/beta-deg": 0.0,
+                "ic/num_engines": 1,
+            }
+            
+            self.backend_interface.init_conditions = init_state_dict
+            self.backend_interface.reset_backend(
+                init_conditions=init_state_dict)
+            print("Randomized initial conditions", init_state_dict)
+                        
+        else:    
+            self.backend_interface.reset_backend()
+        
+        observation = self.__get_observation()
+        info = self.__get_info()
+
+        return observation, info
     
     def render(self, mode:str='human') -> None:
         pass
     
-    def __render_frame(self) -> None:
-        pass
+    # def __render_frame(self) -> None:
+    #     pass
     
-
-# class UAMEnv(gym.Env):
-#     """
-#     Description:
-#         An aircraft is placed at a predefined distance from an objective location at an airspeed defined by the
-#         aircraft's initial velocity.
-
-#     Source:
-#         This environment is based on the work of Alexander Quessy & Thomas Richardson
-
-#     Observation:
-#         Type: Box(1)
-#         Num     Observation     Min         Max
-#         0       RGB image       [0, 0, 0]   [255, 255, 255]
-
-#     Actions:
-#         Type: Box(2)
-#         [All dims in degrees]
-#         Num     Action      Min     Max
-#         0       Heading     -45     +45
-#         1       Pitch       -30     0
-
-#     Reward:
-#         Reward is 1 if step collides in a desired location
-#         Reward is 0 if step collides in undesirable location
-
-#     Starting State:
-#         Defined in basic_ic.xml
-
-#     Episode Termination:
-#         First time collision_info.has_collided == True
-#     """
-
-#     def __init__(self):
-
-#         self.max_sim_time: float = 100.0
-#         self.display_graphics: bool = True
-#         self.airspeed: float = 50.0
-#         self.airsim_frequency_hz: float = 48.0
-#         self.jsbsim_frequency_hz: float = 240.0
-#         self.aircraft: Aircraft = x8
-#         self.init_conditions = None
-#         self.debug_level: int = 0
-#         self.sim: FlightDynamics = FlightDynamics(self.jsbsim_frequency_hz,
-#                                           self.aircraft,
-#                                           self.init_conditions,
-#                                           self.debug_level)
-#         self.ap = X8Autopilot(self.sim)
-#         self.over: bool = False
-#         # angular limits
-#         self.max_hdg: float = 45.0
-#         self.min_hdg: float = -45.0
-#         self.max_pitch: float = 0.0
-#         self.min_pitch: float = -30.0
-#         max_angle = np.array([self.max_hdg, self.max_pitch], dtype=np.float32)
-#         min_angle = np.array([self.min_hdg, self.min_pitch], dtype=np.float32)
-#         self.action_space = spaces.Box(min_angle, max_angle, dtype=np.float32)
-#         self.images = AirSimImages(self.sim)
-#         # dummy_obs = self.images.get_np_image(image_type=airsim.ImageType.Scene)
-#         self.observation_space = spaces.Box(low=0, high=255, shape=dummy_obs.shape, dtype=dummy_obs.dtype)
-
-#         #  variables to keep track of step state
-#         self.graphic_update = 0
-#         self.max_updates = int(self.max_sim_time * self.jsbsim_frequency_hz)  # how many steps to update
-#         self.relative_update = self.airsim_frequency_hz / self.jsbsim_frequency_hz  # rate of airsim:JSBSim
-#         self.id = 0
-#         self.desired_heading = 0
-#         self.desired_pitch = 0
-
-#     def seed(self, seed=None):
-#         self.np_random, seed = seeding.np_random(seed)
-#         return [seed]
-
-#     def step(self, action):
-#         #  only update the commands if just starting the simulation
-#         self.desired_heading, self.desired_pitch = action
-#         # obs = self.images.get_np_image(airsim.ImageType.Scene)
-#         # print(self.desired_pitch)
-#         graphic_i = self.relative_update * self.id
-#         graphic_update_old = self.graphic_update
-#         self.graphic_update = graphic_i // 1.0
-#         # collision = self.sim.get_collision_info()
-#         done = False
-#         rewards = 0
-#         try:
-#             if collision.has_collided:
-#                 done = True
-#                 if collision.object_name == "airport":
-#                     rewards = 1
-#         except TypeError:
-#             print("Collision object does not exist yet")
-#         # update airsim if required
-#         # if self.display_graphics and self.graphic_update > graphic_update_old:
-#         #     self.sim.update_airsim()
-#         # autopilot update
-#         self.ap.airspeed_hold_w_throttle(self.airspeed)
-#         self.ap.heading_hold(self.desired_heading)
-#         self.ap.pitch_hold(self.desired_pitch)
-#         self.sim.run()  # update jsbsim
-#         self.id = self.id + 1
-#         info = {}
-#         return obs, rewards, done, info
-
-#     def reset(self):
-#         """
-#         Reset the simulation to the initial state
-
-#         :return: state
-#         """
-#         self.graphic_update = 0
-#         self.max_updates = int(self.max_sim_time * self.jsbsim_frequency_hz)  # how many steps to update
-#         self.relative_update = self.airsim_frequency_hz / self.jsbsim_frequency_hz  # rate of airsim:JSBSim
-#         self.id = 0
-#         self.desired_heading = 0
-#         self.desired_pitch = 0
-#         self.sim.reinitialise()
-#         obs = self.images.get_np_image(image_type=airsim.ImageType.Scene)
-
-#         return obs
-
-#     def render(self, mode='human'):
-#         """
-#         Renders the graphics, this is done with UE4 and is integral to the programme
-#         :return:
-#         """
-
-#         return None
-

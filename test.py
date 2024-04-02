@@ -1,9 +1,11 @@
 import jsbsim
 import numpy as np
 from guidance_control.autopilot import X8Autopilot
-from src.jsbsim_simulator import FlightDynamics
-from src.jsbsim_aircraft import x8
-
+#from src.jsbsim_simulator import FlightDynamics
+#from src.jsbsim_aircraft import x8
+from jsbsim_backend.simulator import FlightDynamics
+from jsbsim_backend.aircraft import x8
+from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
 
 def feet_to_meters(feet:float) -> float:
     return feet * 0.3048
@@ -66,15 +68,16 @@ t_sim_end = 10
 goal_heading = 80
 n_steps = int(t_sim_end / dt)
 current_heading_dg = fdm.get_property_value("attitude/heading-true-rad")
-
+current_heading_rad = np.deg2rad(current_heading_dg)
 for i in range(0, n_steps):
     #do a level hold 
     #autopilot.level_hold()
     fdm.run()
-    error_heading_dg = goal_heading - current_heading_dg
+    #error_heading_dg = goal_heading - current_heading_dg
+    error_heading_rad = np.deg2rad(goal_heading) - current_heading_rad
     # autopilot.altitude_hold(meters_to_feet(65))
     autopilot.roll_hold(np.deg2rad(10))
-    autopilot.heading_hold(error_heading_dg)
+    autopilot.heading_hold(error_heading_rad)
     autopilot.pitch_hold(np.deg2rad(2))
     altitude_m = feet_to_meters(fdm.get_property_value("position/h-sl-ft"))
     # print(altitude_m)

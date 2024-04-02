@@ -8,8 +8,8 @@ import fixedwing_sim # need this to import the gym environment
 from gymnasium import spaces, logger
 from gymnasium.utils import seeding
 
-from jsbim_backend.aircraft import Aircraft, x8
-from jsbim_backend.simulator import FlightDynamics
+from jsbsim_backend.aircraft import Aircraft, x8
+from jsbsim_backend.simulator import FlightDynamics
 from sim_interface import CLSimInterface, OpenGymInterface
 from guidance_control.autopilot import X8Autopilot
 # from src.image_processing import AirSimImages

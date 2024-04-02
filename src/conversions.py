@@ -11,4 +11,9 @@ def knots_to_mps(knots:float) -> float:
 def mps_to_knots(mps:float) -> float:
     return mps / 0.514444
 
+def mps_to_ktas(mps:float) -> float:
+    return mps * 1.94384
+
+def ktas_to_mps(ktas:float) -> float:
+    return ktas / 1.94384
 

@@ -1,5 +1,5 @@
 import math
-import jsbim_backend.properties as prp
+import jsbsim_backend.properties as prp
 # import src.jsbsim_properties as prp
 import statistics
 

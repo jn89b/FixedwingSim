@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 #import src.jsbsim_properties as prp
-import jsbim_backend.properties as prp
+import jsbsim_backend.properties as prp
 import math
 
 
@@ -19,6 +19,10 @@ class DebugGraphs:
         self.roll = []
         self.airspeed = []
         self.vs = []
+        
+        self.x = []
+        self.y = []
+        self.z = []
 
         self.alpha = []
 
@@ -63,7 +67,8 @@ class DebugGraphs:
     def get_angle_data(self):
         self.pitch.append(self.sim.get_local_orientation()[0])
         self.roll.append(self.sim.get_local_orientation()[1])
-        self.yaw.append(self.sim.get_local_orientation()[2] * (180 / math.pi))
+        self.yaw.append(self.sim.get_local_orientation()[2])
+        # self.yaw.append(self.sim.get_local_orientation()[2] * (180 / math.pi))
 
     def get_lift_data(self):
         # normalized to ignore the aircrafts velocity

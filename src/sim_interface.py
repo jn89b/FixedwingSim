@@ -1,8 +1,8 @@
 from abc import ABC
 import numpy as np
 
-from jsbim_backend.simulator import FlightDynamics
-from jsbim_backend.aircraft import Aircraft, x8
+from jsbsim_backend.simulator import FlightDynamics
+from jsbsim_backend.aircraft import Aircraft, x8
 from debug_utils import *
 # import jsbsim_properties as prp
 from simple_pid import PID
@@ -82,8 +82,32 @@ class OpenGymInterface(CLSimInterface):
         self.over = False
         self.graph = DebugGraphs(self.sim)
         
-    def run_backend(self) -> None:
+    def run_backend(self, track_data:bool=True) -> None:
+        
         self.sim.run()
+        
+        if track_data:
+            self.graph.get_pos_data()
+            self.graph.get_time_data()
+            self.graph.get_angle_data()
+            self.graph.get_airspeed()
+
+    def set_commands(self, action:np.ndarray) -> None:
+        """
+        This sets the roll, pitch, yaw, and throttle commands 
+        for the aircraft using the autopilot, simulating 
+        our flight controller
+        """
+        # self.autopilot.set_commands(action)
+        roll_cmd = action[0]
+        pitch_cmd = action[1]
+        yaw_cmd = action[2]
+        throttle_cmd = action[3] #this is 
+        
+        # self.autopilot.pitch_hold(pitch_cmd)
+        # self.autopilot.roll_hold(roll_cmd)
+        self.autopilot.heading_hold(yaw_cmd)
+        self.autopilot.airspeed_hold_w_throttle(throttle_cmd)
         
     def reset_backend(self, init_conditions:dict=None) -> None:
         if init_conditions is not None:
@@ -95,6 +119,24 @@ class OpenGymInterface(CLSimInterface):
         
     def get_info(self) -> dict:
         return self.sim.get_states()
+
+    def get_observation(self) -> np.ndarray:
+        """
+        Returns the observation space for the environment as 
+        a numpy array 
+        """
+        state_dict = self.sim.get_states()
+        states = [
+            state_dict['x'],
+            state_dict['y'],
+            state_dict['z'],
+            state_dict['phi'],
+            state_dict['theta'],
+            state_dict['psi'],
+            state_dict['airspeed'],
+        ]
+        
+        return np.array(states)
 
     # def render(self, mode: str = 'human') -> None:
     #     self.graph.plot()

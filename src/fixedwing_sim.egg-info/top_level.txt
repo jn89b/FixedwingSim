@@ -4,7 +4,7 @@ debug_utils
 fixedwing_sim
 guidance_control
 image_processing
-jsbim_backend
+jsbsim_backend
 main
 report_diagrams
 sim_interface

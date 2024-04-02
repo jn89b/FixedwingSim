@@ -1,10 +1,10 @@
 import numpy as np
-import jsbim_backend.properties as prp
+import jsbsim_backend.properties as prp
 import math
 import control
 
 from simple_pid import PID
-from jsbim_backend.simulator import FlightDynamics
+from jsbsim_backend.simulator import FlightDynamics
 from scipy import interpolate
 from guidance_control.navigation import LocalNavigation
 
@@ -15,7 +15,7 @@ from guidance_control.navigation import LocalNavigation
 class C172Autopilot:
     def __init__(self, sim):
         self.sim = sim
-
+ 
     def wing_leveler(self):
         error = self.sim[prp.roll_rad]
         kp = 50.0
@@ -192,6 +192,8 @@ class X8Autopilot:
         """
         # Nichols Ziegler tuning Pcr = 0.29, Kcr = 0.0380, PID chosen
         error = roll_commd_rad - self.sim[prp.roll_rad]
+        print("error: ", np.rad2deg(error))
+        
         # error = roll_commd_rad - self.sim.get_property_value('attitude/phi-rad')
         kp = 0.20
         ki = kp*0.0  # tbd, should use rlocus plot and pole-placement
@@ -205,6 +207,8 @@ class X8Autopilot:
         output = -output+rate_output
         # print(output)
         self.sim[prp.aileron_cmd] = output
+        # print("error: ", np.rad2deg(error))
+        # print("output: ", np.rad2deg(output))
         # self.sim['fcs/aileron-cmd-norm'] = output
 
     def heading_hold(self, heading_comm:float) -> None:
@@ -218,6 +222,12 @@ class X8Autopilot:
         # error = heading_comm_dg - self.sim[prp.heading_deg]
         # print("heading command: ", heading_comm)
         error = heading_comm - np.rad2deg(self.sim[prp.heading_rad])
+        
+        # if abs(error) > 2:
+        #     self.roll_hold(np.deg2rad(0))
+        #     return
+        
+        # error = heading_comm - self.sim[prp.heading_rad]
         # print("error: ", error)
         #print("attitude/psi-true-deg", self.sim.get_property_value('attitude/heading-true-deg'))
         #error = heading_comm_dg - self.sim.get_property_value('attitude/psi-true-deg')
@@ -226,16 +236,26 @@ class X8Autopilot:
             error = error + 360
         if error > 180:
             error = error - 360
+        # if error < -math.pi:
+        #     error = error + 2*math.pi
+        # if error > math.pi:
+        #     error = error - 2*math.pi
         # print(error)
         kp = -2.0023 * 0.005
         ki = -0.6382 * 0.005
         heading_controller = PID(kp, ki, 0.0)
         output = heading_controller(error)
-        # Prevent over-bank +/- 30 degrees
+        # Prevent over-bank +/- 30 radians
         if output < - 30 * (math.pi / 180):
             output = - 30 * (math.pi / 180)
         if output > 30 * (math.pi / 180):
             output = 30 * (math.pi / 180)
+
+        # if output < -np.deg2rad(30):
+        #     output = -np.deg2rad(30)
+        # if output > np.deg2rad(30):
+        #     output = np.deg2rad(30)
+
         self.roll_hold(output)
 
     def airspeed_hold_w_throttle(self, airspeed_comm: float) -> None:

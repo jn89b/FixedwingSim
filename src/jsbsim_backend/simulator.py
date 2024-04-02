@@ -3,9 +3,9 @@ import jsbsim
 import os
 import time
 from typing import Dict, Union
-import jsbim_backend.properties as prp
-
-from jsbim_backend.aircraft import Aircraft, cessna172P, x8
+import jsbsim_backend.properties as prp
+from jsbsim_backend.aircraft import Aircraft, cessna172P, x8
+#from jsbsim_backend.aircraft import Aircraft, cessna172P, x8
 from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
 #from src.jsbsim_aircraft import Aircraft, cessna172P, x8
 #from src.conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
@@ -252,13 +252,19 @@ class FlightDynamics:
         """
         position = self.get_local_position()
         orientation = self.get_local_orientation()
+        u_ms = feet_to_meters(self[prp.u_fps])
+        v_ms = feet_to_meters(self[prp.v_fps])
+        w_ms = feet_to_meters(self[prp.w_fps])
+        mag_airspeed = math.sqrt(u_ms**2 + v_ms**2 + w_ms**2)
+        
         states = {
             'x': position[0],
             'y': position[1],
             'z': position[2],
             'phi': orientation[0],
             'theta': orientation[1],
-            'psi': orientation[2]
+            'psi': orientation[2],
+            'airspeed': mag_airspeed,
         }
         
         return states

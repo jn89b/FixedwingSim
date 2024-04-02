@@ -3,8 +3,8 @@ from gymnasium import spaces
 
 
 from typing import Tuple, Dict
-from jsbim_backend.aircraft import Aircraft, x8
-from jsbim_backend.simulator import FlightDynamics
+from jsbsim_backend.aircraft import Aircraft, x8
+from jsbsim_backend.simulator import FlightDynamics
 from sim_interface import CLSimInterface, OpenGymInterface
 
 from guidance_control.autopilot import X8Autopilot

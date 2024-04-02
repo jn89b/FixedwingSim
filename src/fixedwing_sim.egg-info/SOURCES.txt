@@ -29,8 +29,8 @@ src/guidance_control/navigation.py
 src/guidance_control/optimal_control.py
 src/guidance_control/plane_opt_control.py
 src/guidance_control/rotation_utils.py
-src/jsbim_backend/__init__.py
-src/jsbim_backend/aircraft.py
-src/jsbim_backend/properties.py
-src/jsbim_backend/simulator.py
-src/jsbim_backend/utils.py
+src/jsbsim_backend/__init__.py
+src/jsbsim_backend/aircraft.py
+src/jsbsim_backend/properties.py
+src/jsbsim_backend/simulator.py
+src/jsbsim_backend/utils.py
