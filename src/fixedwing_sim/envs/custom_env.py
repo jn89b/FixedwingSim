@@ -1,6 +1,13 @@
 import gymnasium
 from gymnasium import spaces
 
+
+from typing import Tuple, Dict
+from jsbim_backend.aircraft import Aircraft, x8
+from jsbim_backend.simulator import FlightDynamics
+from sim_interface import CLSimInterface, OpenGymInterface
+
+from guidance_control.autopilot import X8Autopilot
 class CustomEnv(gymnasium.Env):
     def __init__(self):
         super().__init__()

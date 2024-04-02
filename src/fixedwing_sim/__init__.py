@@ -1,8 +1,10 @@
+import gymnasium
 from gymnasium.envs.registration import register
 
+
 register(
-    id='UAMEnv-v0',
-    entry_point='src.envs:UAMEnv',
+    id='UAMEnv-v1',
+    entry_point='fixedwing_sim.envs.uav_env:UAMEnv',
     max_episode_steps=1000,
 )
 

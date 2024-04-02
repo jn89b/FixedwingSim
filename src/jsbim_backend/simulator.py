@@ -3,7 +3,6 @@ import jsbsim
 import os
 import time
 from typing import Dict, Union
-#import src.jsbsim_properties as prp
 import jsbim_backend.properties as prp
 
 from jsbim_backend.aircraft import Aircraft, cessna172P, x8
