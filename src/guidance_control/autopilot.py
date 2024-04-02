@@ -4,7 +4,7 @@ import src.jsbsim_properties as prp
 from src.jsbsim_simulator import FlightDynamics
 from scipy import interpolate
 import math
-from src.navigation import LocalNavigation
+from guidance_control.navigation import LocalNavigation
 import control
 
 

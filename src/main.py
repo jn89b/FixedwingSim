@@ -8,8 +8,8 @@ from src.jsbsim_aircraft import Aircraft, cessna172P, ball, x8
 from debug_utils import *
 import jsbsim_properties as prp
 from simple_pid import PID
-from src.autopilot import X8Autopilot
-from src.navigation import WindEstimation
+from guidance_control.autopilot import X8Autopilot
+from guidance_control.navigation import WindEstimation
 from src.report_diagrams import ReportGraphs
 from src.image_processing import AirSimImages, SemanticImageSegmentation
 from typing import Type, Tuple, Dict

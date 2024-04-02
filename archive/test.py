@@ -1,6 +1,6 @@
 import jsbsim
 import numpy as np
-from src.autopilot import X8Autopilot
+from guidance_control.autopilot import X8Autopilot
 from src.jsbsim_simulator import FlightDynamics
 from src.jsbsim_aircraft import x8
 
