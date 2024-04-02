@@ -1,11 +1,12 @@
-from simple_pid import PID
 import numpy as np
-import src.jsbsim_properties as prp
-from src.jsbsim_simulator import FlightDynamics
-from scipy import interpolate
+import jsbim_backend.properties as prp
 import math
-from guidance_control.navigation import LocalNavigation
 import control
+
+from simple_pid import PID
+from jsbim_backend.simulator import FlightDynamics
+from scipy import interpolate
+from guidance_control.navigation import LocalNavigation
 
 
 # Should this be derived from simulation ?

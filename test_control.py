@@ -2,9 +2,8 @@ import jsbsim
 import numpy as np
 import matplotlib.pyplot as plt
 from guidance_control.autopilot import X8Autopilot
-#from src.jsbsim_simulator import FlightDynamics
-from src.jsbsim_aircraft import x8
-from src.conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
+from jsbim_backend.simulator import FlightDynamics
+from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
 
 # https://jsbsim-team.github.io/jsbsim/classJSBSim_1_1FGInitialCondition.html
 """
