@@ -9,9 +9,11 @@ from src.conversions import meters_to_feet, mps_to_ktas, ktas_to_mps
 #this is used to interface with the stable baselines3 library
 #we want to normalize the states and actions
 # import stable_baselines
-# from stable_baselines3 import PPO
+from stable_baselines3 import PPO
 # from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 # from stable_baselines3.common.env_util import make_vec_env
+LOAD_MODEL = True
+TOTAL_TIMESTEPS = 100000 #
 
 
 ## Need to define these parameters first before 
@@ -26,7 +28,7 @@ init_state_dict = {
     "ic/h-sl-ft": meters_to_feet(50),
     "ic/long-gc-deg": 0.0,
     "ic/lat-gc-deg": 0.0,
-    "ic/psi-true-deg": 90,
+    "ic/psi-true-deg": 0,
     "ic/theta-deg": 0.0,
     "ic/phi-deg": 0.0,
     "ic/alpha-deg": 0.0,
@@ -68,8 +70,8 @@ aircraft_state_constraints = {
     'max_phi': max_roll,
     'min_theta': min_pitch,
     'max_theta': max_pitch,
-    'min_psi': min_yaw,
-    'max_psi': max_yaw,
+    'min_psi': np.deg2rad(-180),
+    'max_psi': np.deg2rad(180),
     'min_air_speed': 15, # m/s
     'max_air_speed': 30, # m/s
 }
@@ -79,8 +81,10 @@ aircraft_state_constraints = {
 env = gym.make('UAMEnv-v1', 
                backend_interface=gym_adapter,
                control_constraints=aircraft_constraints,
-               state_constraints=aircraft_state_constraints)
+               state_constraints=aircraft_state_constraints,
+               use_random_start=False)
 
+# env._max_episode_steps = 700
 print("enviroment created")
 
 
@@ -104,44 +108,57 @@ Positive roll is to the right
 
 #mapping normalized action to real action
 action_test = [
-    0, #roll
+    1, #roll
     0, #pitch
-    0, #yaw 
+    1, #yaw 
     0.1, #throttle, this is actually airspeed
 ]
+print("running the environment")
+## load the model
+if LOAD_MODEL:
+    # model = DQN.load("dqn_missiongym")
+    model = PPO.load("simple_high_level")
+else:
+    # model = DQN('MultiInputPolicy', env, 
+    #             verbose=1, tensorboard_log='tensorboard_logs/',
+    #             device='cuda')
+    model = PPO("MultiInputPolicy", 
+                env,
+                learning_rate=0.0001,
+                # clip_range=0.2,
+                # n_epochs=10,
+                # seed=42, 
+                verbose=1, tensorboard_log='tensorboard_logs/', 
+                device='cuda')
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+    model.save("simple_high_level")
+    print("model saved")
+    
+obs, info = env.reset()
 
+N = 1000
 x_history = []
 y_history = []
 z_history = []
-phi_history = []
-theta_history = []
-psi_history = []
 
-sim_end_time = 10
-
-N = int(sim_end_time * env.backend_interface.sim.sim_frequency_hz)
 for i in range(N):
-    # action = env.action_space.sample()
-    observation, reward, done, _, info = env.step(action_test)
+    action, _states = model.predict(obs, deterministic=True)
+    obs, reward, done, _, info = env.step(action)
     if done:
-        env.reset()
-        
-    observation = observation['ego']
-    x_history.append(observation[0])
-    y_history.append(observation[1])
-    z_history.append(observation[2])
-    phi_history.append(observation[3])
-    theta_history.append(observation[4])
-    psi_history.append(observation[5])
-        
+        obs, info = env.reset()
+    # print(obs)
+    # print(rewards)
+    # print(done)
+    # print(info)
+    x = obs['ego'][0]
+    y = obs['ego'][1]
+    z = obs['ego'][2]
+    x_history.append(x)
+    y_history.append(y)
+    z_history.append(z)
+    
 import matplotlib.pyplot as plt
 plt.rcParams.update(plt.rcParamsDefault)
-plt.close('all')
-data_results = env.backend_interface.graph
-time_history = data_results.time 
-# phi_history = data_results.roll
-# theta_history = data_results.pitch
-# psi_history = data_results.yaw
 
 #plot 3d position
 fig = plt.figure()
@@ -151,18 +168,5 @@ ax.scatter(x_history[0], y_history[0], z_history[0], c='r', marker='o')
 ax.plot3D(x_history, y_history, z_history, 'gray')  
 ax.set_xlabel('X [m]')
 ax.set_ylabel('Y [m]')
-
-fig, ax = plt.subplots(3,1)
-ax[0].plot(time_history, np.rad2deg(phi_history))
-ax[1].plot(time_history, np.rad2deg(theta_history))
-ax[2].plot(time_history, np.rad2deg(psi_history)) 
-
-
-ax[0].set_ylabel('Roll [deg]')
-ax[1].set_ylabel('Pitch [deg]')
-ax[2].set_ylabel('Yaw [deg]')
-
-fig,ax = plt.subplots()
-ax.plot(time_history, data_results.airspeed)
 
 plt.show()

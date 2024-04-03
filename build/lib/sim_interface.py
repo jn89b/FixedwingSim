@@ -103,10 +103,9 @@ class OpenGymInterface(CLSimInterface):
         yaw_cmd = action[2]
         throttle_cmd = action[3] #this is 
 
-        # self.autopilot.roll_hold(roll_cmd)
-        # self.autopilot.pitch_hold(pitch_cmd)
-        self.autopilot.altitude_hold(meters_to_feet(50))
-        self.autopilot.heading_hold(np.rad2deg(yaw_cmd)) # I had to inevert the yaw command, this is a bug
+        self.autopilot.roll_hold(roll_cmd)
+        self.autopilot.pitch_hold(pitch_cmd)
+        self.autopilot.heading_hold(yaw_cmd) # I had to inevert the yaw command, this is a bug
         self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(throttle_cmd))
         
     def reset_backend(self, init_conditions:dict=None) -> None:

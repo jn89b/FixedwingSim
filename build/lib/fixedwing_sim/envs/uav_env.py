@@ -40,9 +40,9 @@ class UAMEnv(gymnasium.Env):
         self.use_random_start = use_random_start
         
         ## refactor this 
-        self.goal_position = [60, 60, 50]
-        self.distance_tolerance = 10
-        self.time_step_constant = 1000 #number of steps 
+        self.goal_position = [100, 100, 50]
+        self.distance_tolerance = 5
+        self.time_step_constant = 2000 #number of steps 
         self.time_limit = self.time_step_constant
         
     def init_attitude_action_space(self) -> spaces.Box:
@@ -166,10 +166,6 @@ class UAMEnv(gymnasium.Env):
         
         # print("Current position", x, y, z)
                 
-        if z > 100:
-            print("Crashed")
-            return -1000, True
-        
         if z < 0:
             print("Crashed")
             return -1000, True
@@ -181,19 +177,6 @@ class UAMEnv(gymnasium.Env):
         goal_x = self.goal_position[0]
         goal_y = self.goal_position[1]
         goal_z = self.goal_position[2]
-
-        dz = goal_z - z
-        dy = goal_y - y
-        dx = goal_x - x
-        
-        los_goal = np.arctan2(dy, dx)
-        los_unit = np.array([np.cos(los_goal), np.sin(los_goal)])
-        
-        # print("obsevation ego yaw", observation['ego'][5])
-        ego_unit = np.array([np.cos(observation['ego'][5]), np.sin(observation['ego'][5])])
-        
-        dot_product = np.dot(los_unit, ego_unit)
-        # print("Dot product", dot_product)
         
         distance = math.sqrt((x - goal_x)**2 + (y - goal_y)**2 + (z - goal_z)**2)
         
@@ -201,13 +184,7 @@ class UAMEnv(gymnasium.Env):
             print("Goal reached")
             return 1000, True
         
-        # reward = dot_product - abs(dz)
-        #print("Distance", distance, dot_product)
-        #reward = np.exp(-0.5 * (distance**2))
-        reward = (1 / (1 + distance)) #+ dot_product
-        # print("Reward", reward, distance)
-
-        return reward, False
+        return -distance, False
         
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
         """
@@ -232,8 +209,6 @@ class UAMEnv(gymnasium.Env):
         
         if done:
             print("Episode done", reward)
-            
-        #check if max episode steps reached
         
         return observation, reward, done, False, info
     
@@ -264,10 +239,8 @@ class UAMEnv(gymnasium.Env):
                 self.state_constraints['max_theta'])
             
             #move lat and lon to random position within a small radius
-            # random_lat_dg = np.random.uniform(-0.0001, 0.0001)
-            # random_lon_dg = np.random.uniform(-0.0001, 0.0001)
-            random_lat_dg = 0.0
-            random_lon_dg = 0.0
+            random_lat_dg = np.random.uniform(-0.0001, 0.0001)
+            random_lon_dg = np.random.uniform(-0.0001, 0.0001)
             random_alt_ft = meters_to_feet(np.random.uniform(40, 80))
             
             init_state_dict = {
@@ -287,11 +260,6 @@ class UAMEnv(gymnasium.Env):
                 "ic/beta-deg": 0.0,
                 "ic/num_engines": 1,
             }
-            
-            goal_x = 100#np.random.uniform(, 100)
-            goal_y = 100#np.random.uniform(-100, 100)
-            goal_z = 50 #np.random.uniform(40, 80)
-            self.goal_position = [goal_x, goal_y, goal_z]
             
             self.backend_interface.init_conditions = init_state_dict
             self.backend_interface.reset_backend(
