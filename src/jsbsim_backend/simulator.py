@@ -228,7 +228,7 @@ class FlightDynamics:
             lon = feet_to_meters(lon)
             alt = feet_to_meters(alt)
             
-        position = [lat, lon, alt]
+        position = [lon, lat, alt]
         return position
 
     def get_local_orientation(self) -> list:
@@ -237,8 +237,8 @@ class FlightDynamics:
 
         :return: orientation [pitch, roll, yaw]
         # """
-        pitch = self[prp.pitch_rad]
         roll = self[prp.roll_rad]
+        pitch = self[prp.pitch_rad]
         # yaw = self[prp.heading_deg] * (math.pi / 180)
         yaw = self[prp.heading_rad]
         # yaw = self.fdm.get_property_value("attitude/heading-true-rad")

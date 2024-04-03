@@ -5,6 +5,8 @@ from guidance_control.autopilot import X8Autopilot
 from jsbsim_backend.simulator import FlightDynamics
 from conversions import feet_to_meters, meters_to_feet, ktas_to_mps, mps_to_ktas
 
+plt.close('all')
+
 """
 Trying to figure out how to interface with the JSBSim API
 """
@@ -36,8 +38,8 @@ states = sim.get_states()
 
 # start engine
 sim.start_engines()
-sim.set_throttle_mixture_controls(0.2, 0)
-sim_end_time = 10
+sim.set_throttle_mixture_controls(0.5, 0)
+sim_end_time = 15
 
 sim_freq = sim.sim_frequency_hz
 N = int(sim_end_time * sim_freq)

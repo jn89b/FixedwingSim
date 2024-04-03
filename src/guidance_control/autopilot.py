@@ -192,7 +192,7 @@ class X8Autopilot:
         """
         # Nichols Ziegler tuning Pcr = 0.29, Kcr = 0.0380, PID chosen
         error = roll_commd_rad - self.sim[prp.roll_rad]
-        print("error: ", np.rad2deg(error))
+        # print("error: ", np.rad2deg(error))
         
         # error = roll_commd_rad - self.sim.get_property_value('attitude/phi-rad')
         kp = 0.20

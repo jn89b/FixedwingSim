@@ -104,6 +104,9 @@ class UAMEnv(gymnasium.Env):
             
         return obs_space
     
+    def map_real_to_norm(self, norm_max:float, norm_min:float, real_val:float) -> float:
+        return 2 * (real_val - norm_min) / (norm_max - norm_min) - 1
+    
     def norm_map_to_real(self, norm_max:float, norm_min:float, norm_val:float) -> float:
         return norm_min + (norm_max - norm_min) * (norm_val + 1) / 2
     
@@ -143,7 +146,10 @@ class UAMEnv(gymnasium.Env):
         return {}
         
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
-        
+        """
+        Note action input is normalized to [-1, 1] and must be mapped to the
+        constraints of the aircraft
+        """
         reward = 0
         done = False
         

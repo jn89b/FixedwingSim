@@ -3,7 +3,7 @@ from mpl_toolkits import mplot3d
 #import src.jsbsim_properties as prp
 import jsbsim_backend.properties as prp
 import math
-
+from conversions import feet_to_meters, meters_to_feet, ktas_to_mps, mps_to_ktas
 
 class DebugGraphs:
     def __init__(self, sim):
@@ -104,7 +104,10 @@ class DebugGraphs:
         self.alpha.append(self.sim[prp.alpha])
 
     def get_airspeed(self):
-        self.airspeed.append(self.sim[prp.airspeed] * 0.5925)
+        airspeed_ms = feet_to_meters(self.sim[prp.airspeed])
+        self.airspeed.append(airspeed_ms)  
+        #self.airspeed.append(self.sim[prp.airspeed])
+        # self.airspeed.append(self.sim[prp.airspeed] * 0.5925)
         self.vs.append(self.sim[prp.v_down_fps] * -1 * 60)  # multiplied to fpm from fps
 
     def pos_plot(self):

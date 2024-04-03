@@ -8,6 +8,8 @@ from debug_utils import *
 from simple_pid import PID
 from guidance_control.autopilot import X8Autopilot
 from guidance_control.navigation import WindEstimation
+from conversions import feet_to_meters, meters_to_feet, ktas_to_mps, mps_to_ktas
+
 from src.report_diagrams import ReportGraphs
 from typing import Type, Tuple, Dict
 
@@ -32,6 +34,8 @@ class CLSimInterface():
         self.sim = FlightDynamics(aircraft=aircraft, 
                                   init_conditions=init_conditions, 
                                   debug_level=debug_level)
+        self.sim.start_engines()
+        self.sim.set_throttle_mixture_controls(0.5, 0)
         
         self.autopilot = autopilot
         if self.autopilot is None:
@@ -42,8 +46,13 @@ class CLSimInterface():
         self.over = False
         self.graph = DebugGraphs(self.sim)
         
-    def run_backend(self) -> None:
-        raise NotImplementedError("Method run_sim not implemented")
+    def run_backend(self, track_data:bool=True) -> None:
+        self.sim.run()
+        if track_data:
+            self.graph.get_pos_data()
+            self.graph.get_time_data()
+            self.graph.get_angle_data()
+            self.graph.get_airspeed()
     
     def reset_backend(self) -> None:
         """
@@ -81,33 +90,23 @@ class OpenGymInterface(CLSimInterface):
         self.report = ReportGraphs(self.sim)
         self.over = False
         self.graph = DebugGraphs(self.sim)
-        
-    def run_backend(self, track_data:bool=True) -> None:
-        
-        self.sim.run()
-        
-        if track_data:
-            self.graph.get_pos_data()
-            self.graph.get_time_data()
-            self.graph.get_angle_data()
-            self.graph.get_airspeed()
 
     def set_commands(self, action:np.ndarray) -> None:
         """
         This sets the roll, pitch, yaw, and throttle commands 
         for the aircraft using the autopilot, simulating 
-        our flight controller
+        our flight controller        
         """
         # self.autopilot.set_commands(action)
         roll_cmd = action[0]
         pitch_cmd = action[1]
         yaw_cmd = action[2]
         throttle_cmd = action[3] #this is 
-        
-        # self.autopilot.pitch_hold(pitch_cmd)
-        # self.autopilot.roll_hold(roll_cmd)
-        self.autopilot.heading_hold(yaw_cmd)
-        self.autopilot.airspeed_hold_w_throttle(throttle_cmd)
+
+        self.autopilot.roll_hold(roll_cmd)
+        self.autopilot.pitch_hold(pitch_cmd)
+        self.autopilot.heading_hold(yaw_cmd) # I had to inevert the yaw command, this is a bug
+        self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(throttle_cmd))
         
     def reset_backend(self, init_conditions:dict=None) -> None:
         if init_conditions is not None:
@@ -116,7 +115,7 @@ class OpenGymInterface(CLSimInterface):
                                       init_conditions=init_conditions)
         else:
             self.sim.reinitialise(self.init_conditions)
-        
+
     def get_info(self) -> dict:
         return self.sim.get_states()
 
@@ -135,7 +134,7 @@ class OpenGymInterface(CLSimInterface):
             state_dict['psi'],
             state_dict['airspeed'],
         ]
-        
+       
         return np.array(states)
 
     # def render(self, mode: str = 'human') -> None:
