@@ -1,10 +1,16 @@
 Metadata-Version: 2.1
-Name: fixedwing_sim
+Name: fixedwing-sim
 Version: 0.0.1
+Summary: UNKNOWN
+Home-page: UNKNOWN
 Author: Justin Nguyen
 Author-email: jnguyenblue2804@gmail.com
+License: UNKNOWN
+Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 License-File: LICENSE
-Requires-Dist: gym
+
+UNKNOWN
+

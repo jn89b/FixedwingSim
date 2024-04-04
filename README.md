@@ -2,12 +2,16 @@
 Combines JSBSim and Airsim within a python module to simulate a fixedwing aircraft for Reinforcement Learning (RL)
 
 ## Installation
-
-- [Install Airsim](https://github.com/microsoft/AirSim)
-- [Install JSBSim](https://github.com/JSBSim-Team/jsbsim)
 - Clone this repository onto your system
+- Once cloned do the following commands:
+```
+pip install -r requirements.txt #install all necessary pacakges for code to run
+pip install -e . #install fixedwing_sim module
+```
+
 - Move the x8 dir into your JSBSim aircraft dir
 - Move the electric800w.xml file into the x8 dir into the engine dir
+
 
 ## Usage
 
