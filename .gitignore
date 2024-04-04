@@ -1,10 +1,11 @@
-*.sh
+# *.sh
 *.jpg
 *.png
 *.pyc
 *.iml
 *.out
 *.csv
+*.zip
 
 runs
 data
