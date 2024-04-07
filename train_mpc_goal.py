@@ -10,6 +10,7 @@ from src.conversions import meters_to_feet, mps_to_ktas
 
 
 from stable_baselines3 import PPO
+from stable_baselines3 import DDPG
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.env_checker import check_env
@@ -45,7 +46,7 @@ init_state_dict = {
     "ic/h-sl-ft": meters_to_feet(50),
     "ic/long-gc-deg": 0.0,
     "ic/lat-gc-deg": 0.0,
-    "ic/psi-true-deg": 0,
+    "ic/psi-true-deg": 20.0,
     "ic/theta-deg": 0.0,
     "ic/phi-deg": 0.0,
     "ic/alpha-deg": 0.0,
@@ -61,12 +62,12 @@ mpc_params = {
 }
 
 rl_control_constraints = {
-    'x_min': -10,
-    'x_max': 10,
-    'y_min': -10,
-    'y_max': 10,
-    'z_min': -10,
-    'z_max': 10,
+    'x_min': -1,
+    'x_max': 1,
+    'y_min': -1,
+    'y_max': 1,
+    'z_min': -1,
+    'z_max': 1,
 }
 
 control_constraints = {
@@ -110,7 +111,7 @@ aircraft = x8
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  aircraft=aircraft,
                                  use_mpc=True,
-                                 flight_dynamics_sim_hz=30,
+                                 flight_dynamics_sim_hz=50,
                                  mpc_controller=mpc_control)
 
 
@@ -125,7 +126,7 @@ env = gym.make('MPCEnv',
                mpc_control_constraints=control_constraints,
                state_constraints=state_constraints)
 # check_env(env)
-env._max_episode_steps = 500
+env._max_episode_steps = 1000
 
 obs, info = env.reset()
 print("enviroment created")
@@ -146,15 +147,26 @@ y_ref = []
 z_ref = []
 
 
-model = PPO("MultiInputPolicy", 
-            env,
-            learning_rate=0.0001,
-            # clip_range=0.2,
-            n_epochs=2,
-            # ent_coef=0.01,
-            # seed=42, 
-            verbose=1, tensorboard_log='tensorboard_logs/', 
-            device='cuda')
+# model = PPO("MultiInputPolicy", 
+#             env,
+#             learning_rate=0.001,
+#             # clip_range=0.2,
+#             n_epochs=10,
+#             ent_coef=0.001,
+#             # seed=42, 
+#             verbose=1, tensorboard_log='tensorboard_logs/', 
+#             device='cuda')
+# model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+# model.save("simple_high_level")
+# print("model saved")
+
+#use DDPG
+model = DDPG("MultiInputPolicy",
+             env,
+             learning_rate=0.001,
+             verbose=1,
+             tensorboard_log='tensorboard_logs/',
+             device='cuda')
 model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
 model.save("simple_high_level")
 print("model saved")

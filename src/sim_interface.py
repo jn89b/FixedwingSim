@@ -129,8 +129,10 @@ class OpenGymInterface(CLSimInterface):
                 0,
                 20
             ]
+            #print("action", action)
             #feed it to the mpc controller 
             init_states = self.get_observation()
+            # print("init_states", init_states)
             init_control = [
                 init_states[3],
                 init_states[4],
@@ -139,7 +141,24 @@ class OpenGymInterface(CLSimInterface):
             ]
             solution_results, end_time = self.mpc_controller.get_solution(
                 init_states, final_states, init_control)
-
+            
+            
+            for k in solution_results.keys():
+                # print(k, solution_results[k])
+                v_cmd = solution_results[k]
+                z_cmd = solution_results['z']
+                roll_cmd = solution_results['phi']
+                pitch_cmd = solution_results['theta']
+                heading_cmd = solution_results['psi']
+                airspeed_cmd = solution_results['v_cmd']
+                
+                #for i in range(len(v_cmd)):
+                # for i in range(5):
+                #     self.autopilot.altitude_hold(z_cmd[i])  
+                #     self.autopilot.heading_hold(np.rad2deg(heading_cmd[i]))
+                #     self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd[i]))
+                    #self.run_backend()
+                    
             #set the commands
             #idx_step = int((end_time - init_states['time']) * self.flight_dynamics_sim_hz)
             idx_step = 1
@@ -149,10 +168,10 @@ class OpenGymInterface(CLSimInterface):
             heading_cmd = solution_results['psi'][idx_step]
             airspeed_cmd = solution_results['v_cmd'][idx_step]
 
-            self.autopilot.pitch_hold(pitch_cmd)
-            self.autopilot.roll_hold(roll_cmd)
-            # self.autopilot.heading_hold(np.rad2deg(heading_cmd))
-            # self.autopilot.altitude_hold(meters_to_feet(50))
+            # self.autopilot.pitch_hold(pitch_cmd)
+            # self.autopilot.roll_hold(roll_cmd)
+            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
+            self.autopilot.altitude_hold(meters_to_feet(50))
             self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
         
     def reset_backend(self, init_conditions:dict=None) -> None:

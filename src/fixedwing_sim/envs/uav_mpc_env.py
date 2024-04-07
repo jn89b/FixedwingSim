@@ -80,9 +80,9 @@ class MPCEnv(gymnasium.Env):
         self.use_random_start = use_random_start
         
         ## refactor this 
-        self.goal_position = [30, 30, 50]
-        self.distance_tolerance = 10
-        self.time_step_constant = 500 #number of steps 
+        self.goal_position = [30, 40, 50]
+        self.distance_tolerance = 5
+        self.time_step_constant = 2000 #number of steps 
         self.time_limit = self.time_step_constant
         
         init_obs = self.__get_observation()
@@ -92,6 +92,7 @@ class MPCEnv(gymnasium.Env):
             init_obs['ego'][1],
             init_obs['ego'][2]
         )
+
         self.init_counter = 0
     
     def init_attitude_action_space(self) -> spaces.Box:
@@ -227,13 +228,12 @@ class MPCEnv(gymnasium.Env):
                         
         if z > 100:
             print("Crashed", x, y, z, yaw)
-            return -1000, True
+            return -100, True
         
         if z < 0:
             print("Crashed", x, y, z, yaw)
-            return -1000, True
-        
-
+            return -100, True
+    
         goal_x = self.goal_position[0]
         goal_y = self.goal_position[1]
         goal_z = self.goal_position[2]
@@ -255,24 +255,27 @@ class MPCEnv(gymnasium.Env):
         # print("Dot product", dot_product)
         
         distance = math.sqrt((x - goal_x)**2 + (y - goal_y)**2 + (z - goal_z)**2)
+        
         # print("Distance", x, y, z, distance)
         # print("current heading", np.rad2deg(yaw), "desired heading", np.rad2deg(los_goal), "error heading", np.rad2deg(error_heading))
         if distance < self.distance_tolerance:
             print("Goal reached")
             return 1000, True
     
+        reward = -distance - self.old_distance_to_goal
         # reward = dot_product - abs(dz)
         #print("Distance", distance, dot_product)
         #reward = np.exp(-0.5 * (distance**2))
-        reward = (1 / (1 + distance)) #+ dot_product - abs(dz)
+        # reward = (1 / (1 + distance)) #+ dot_product - abs(dz)
         # print("Reward", reward, distance)
         # reward = -error_heading        
         #we want to distance to the goal to decrease
         # reward = -distance #self.old_distance_to_goal - distance
         
         #update the old distance to goal
-        self.old_distance_to_goal = distance
-
+        # self.old_distance_to_goal = [x, y, z]
+        self.old_distance_to_goal = distance 
+        
         return reward, False
         
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
@@ -316,29 +319,33 @@ class MPCEnv(gymnasium.Env):
         # if delta_psi > self.mpc_control_constraints['u_psi_max']:
         #     # print("Delta psi", delta_psi)
         #     reward = -1000
-            # done = True
-            #return observation, reward, done, False, info
+        #     done = True
+        #     return observation, reward, done, False, info
         
-        #print("theta_max", np.rad2deg(self.mpc_control_constraints['u_theta_max']))
+        # # print("theta_max", np.rad2deg(self.mpc_control_constraints['u_theta_max']))
         # if delta_theta > self.mpc_control_constraints['u_theta_max']:
         #     # print("observation ego", observation['ego'])
         #     # print("current theta", np.rad2deg(observation['ego'][4]), 
         #     #       "desired theta", np.rad2deg(proj_theta), 
         #     #       "delta theta", np.rad2deg(delta_theta))
         #     reward = -1000
-            # done = True
-            #return observation, reward, done, False, info
+        #     done = True
+        #     return observation, reward, done, False, info
         
-        self.backend_interface.set_commands(real_action)
-        self.backend_interface.run_backend()        
+        
+        position_action = np.array([proj_x, proj_y, proj_z])
+        self.backend_interface.set_commands(position_action)
+        self.backend_interface.run_backend() 
+        # self.backend_interface.run_backend()        
         step_reward,done = self.get_reward()        
-        reward   += step_reward
+        time_penalty = -1
+        reward   += step_reward + time_penalty 
 
-        # if self.init_counter % 100 == 0:
-        #     print("Step", self.init_counter, self.time_limit)
-        #     print("x, y, z", observation['ego'][0], 
-        #           observation['ego'][1], 
-        #           observation['ego'][2])
+        if self.init_counter % 100 == 0:
+            print("Step", self.init_counter, self.time_limit)
+            print("x, y, z", observation['ego'][0], 
+                  observation['ego'][1], 
+                  observation['ego'][2])
 
         if self.time_limit <= 0:
             done = True
