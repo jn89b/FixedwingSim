@@ -241,6 +241,8 @@ class FlightDynamics:
         pitch = self[prp.pitch_rad]
         # yaw = self[prp.heading_deg] * (math.pi / 180)
         yaw = self[prp.heading_rad]
+        #wrap yaw to -pi to pi
+        yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
         # yaw = self.fdm.get_property_value("attitude/heading-true-rad")
         #self[prp.heading_rad]
         orientation = [roll, pitch, yaw]

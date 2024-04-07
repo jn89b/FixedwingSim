@@ -10,7 +10,6 @@ src/report_diagrams.py
 src/sim_interface.py
 src/tasks.py
 src/test.py
-src/fixedwing_sim/__init__.py
 src/fixedwing_sim.egg-info/PKG-INFO
 src/fixedwing_sim.egg-info/SOURCES.txt
 src/fixedwing_sim.egg-info/dependency_links.txt
@@ -22,6 +21,7 @@ src/fixedwing_sim/envs/__init__.py
 src/fixedwing_sim/envs/custom_env.py
 src/fixedwing_sim/envs/env_test.py
 src/fixedwing_sim/envs/uav_env.py
+src/fixedwing_sim/envs/uav_mpc_env.py
 src/guidance_control/__init__.py
 src/guidance_control/autopilot.py
 src/guidance_control/effector.py
@@ -34,3 +34,16 @@ src/jsbsim_backend/aircraft.py
 src/jsbsim_backend/properties.py
 src/jsbsim_backend/simulator.py
 src/jsbsim_backend/utils.py
+src/models/Plane.py
+src/models/__init__.py
+src/models/toycar.py
+src/opt_control/Effector.py
+src/opt_control/OptiMPC.py
+src/opt_control/OptimalControl.py
+src/opt_control/PID.py
+src/opt_control/PlaneMPC.py
+src/opt_control/PlaneModel2.py
+src/opt_control/PlaneOptControl.py
+src/opt_control/PlaneOptControl2.py
+src/opt_control/__init__.py
+src/opt_control/rotation_utils.py

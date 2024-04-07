@@ -21,7 +21,7 @@ init_state_dict = {
     "ic/h-sl-ft": meters_to_feet(50),
     "ic/long-gc-deg": 0.0,
     "ic/lat-gc-deg": 0.0,
-    "ic/psi-true-deg": 20,
+    "ic/psi-true-deg": 45,
     "ic/theta-deg": 0.0,
     "ic/phi-deg": 0.0,
     "ic/alpha-deg": 0.0,

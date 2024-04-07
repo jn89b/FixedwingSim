@@ -1,8 +1,10 @@
+import os
 import fixedwing_sim
 import gymnasium as gym
 import numpy as np
-from jsbsim_backend.aircraft import Aircraft, x8
+import torch
 
+from jsbsim_backend.aircraft import Aircraft, x8
 from src.sim_interface import OpenGymInterface
 from src.conversions import meters_to_feet, mps_to_ktas, ktas_to_mps
 
@@ -10,11 +12,14 @@ from src.conversions import meters_to_feet, mps_to_ktas, ktas_to_mps
 #we want to normalize the states and actions
 # import stable_baselines
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.env_checker import check_env
 # from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 # from stable_baselines3.common.env_util import make_vec_env
-LOAD_MODEL = True
+LOAD_MODEL = False
 TOTAL_TIMESTEPS = 100000 #
-
+USE_PARALLEL = False
 
 ## Need to define these parameters first before 
 # running the test
@@ -28,7 +33,7 @@ init_state_dict = {
     "ic/h-sl-ft": meters_to_feet(50),
     "ic/long-gc-deg": 0.0,
     "ic/lat-gc-deg": 0.0,
-    "ic/psi-true-deg": 0,
+    "ic/psi-true-deg": 45,
     "ic/theta-deg": 0.0,
     "ic/phi-deg": 0.0,
     "ic/alpha-deg": 0.0,
@@ -38,6 +43,7 @@ init_state_dict = {
 
 aircraft = x8
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
+                               flight_dynamics_sim_hz=60,
                                  aircraft=aircraft,)
 
 max_pitch = np.deg2rad(15)
@@ -56,7 +62,7 @@ aircraft_constraints = {
     'max_yaw':   max_yaw,
     'min_yaw':   min_yaw, 
     'max_throttle': 30, #this is bad, actually using airspeed 
-    'min_throttle': 15, #this is bad, actually using airspeed
+    'min_throttle': 12, #this is bad, actually using airspeed
 }
 
 aircraft_state_constraints = {
@@ -72,7 +78,7 @@ aircraft_state_constraints = {
     'max_theta': max_pitch,
     'min_psi': np.deg2rad(-180),
     'max_psi': np.deg2rad(180),
-    'min_air_speed': 15, # m/s
+    'min_air_speed': 10, # m/s
     'max_air_speed': 30, # m/s
 }
 
@@ -84,7 +90,7 @@ env = gym.make('UAMEnv-v1',
                state_constraints=aircraft_state_constraints,
                use_random_start=False)
 
-# env._max_episode_steps = 700
+env._max_episode_steps = 1E5
 print("enviroment created")
 
 
@@ -114,25 +120,56 @@ action_test = [
     0.1, #throttle, this is actually airspeed
 ]
 print("running the environment")
+print("torch check cuda", torch.cuda.is_available())
+
+print()
+
 ## load the model
 if LOAD_MODEL:
     # model = DQN.load("dqn_missiongym")
     model = PPO.load("simple_high_level")
 else:
-    # model = DQN('MultiInputPolicy', env, 
-    #             verbose=1, tensorboard_log='tensorboard_logs/',
-    #             device='cuda')
-    model = PPO("MultiInputPolicy", 
-                env,
-                learning_rate=0.0001,
-                # clip_range=0.2,
-                # n_epochs=10,
-                # seed=42, 
-                verbose=1, tensorboard_log='tensorboard_logs/', 
-                device='cuda')
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
-    model.save("simple_high_level")
-    print("model saved")
+    if not USE_PARALLEL:
+        check_env(env)
+        # model = DQN('MultiInputPolicy', env, 
+        #             verbose=1, tensorboard_log='tensorboard_logs/',
+        #             device='cuda')
+        model = PPO("MultiInputPolicy", 
+                    env,
+                    learning_rate=0.0001,
+                    # clip_range=0.2,
+                    # n_epochs=10,
+                    ent_coef=0.01,
+                    # seed=42, 
+                    verbose=1, tensorboard_log='tensorboard_logs/', 
+                    device='cuda')
+        model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+        model.save("simple_high_level")
+        print("model saved")
+    else:
+        check_env(env)
+        # select number of parallel environments, the optimal choice is usually the number of vCPU.
+        N_ENVS = os.cpu_count()
+        vec_env = make_vec_env(
+            lambda: env,
+            n_envs=N_ENVS,
+            # this can also be vec_env_cls=SubprocVecEnv, refer to the doc for more info.
+            vec_env_cls=DummyVecEnv,
+            # vec_env_kwargs=dict(start_method="fork"),
+        )
+        model = PPO("MultiInputPolicy", 
+                    vec_env,
+                    learning_rate=0.0001,
+                    # clip_range=0.2,
+                    # n_epochs=10,
+                    ent_coef=0.0001,
+                    # seed=42, 
+                    verbose=1, tensorboard_log='tensorboard_logs/', 
+                    device='cuda')
+        model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+        model.save("simple_high_level")
+        # don't forget to close the environment
+        vec_env.close()
     
 obs, info = env.reset()
 
@@ -168,5 +205,4 @@ ax.scatter(x_history[0], y_history[0], z_history[0], c='r', marker='o')
 ax.plot3D(x_history, y_history, z_history, 'gray')  
 ax.set_xlabel('X [m]')
 ax.set_ylabel('Y [m]')
-
 plt.show()

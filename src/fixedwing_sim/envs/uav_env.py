@@ -13,8 +13,6 @@ from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_kno
 from sim_interface import CLSimInterface, OpenGymInterface
 
 from guidance_control.autopilot import X8Autopilot
-# from src.image_processing import AirSimImages
-
 
 class UAMEnv(gymnasium.Env):
     def __init__(self, 
@@ -37,6 +35,7 @@ class UAMEnv(gymnasium.Env):
                 "ego": self.ego_obs_space
             }
         )
+        # self.observation_space = self.ego_obs_space
         self.use_random_start = use_random_start
         
         ## refactor this 
@@ -44,6 +43,14 @@ class UAMEnv(gymnasium.Env):
         self.distance_tolerance = 10
         self.time_step_constant = 1000 #number of steps 
         self.time_limit = self.time_step_constant
+        
+        init_obs = self.__get_observation()
+        
+        self.old_distance_to_goal = self.compute_distance_to_goal(
+            init_obs['ego'][0],
+            init_obs['ego'][1],
+            init_obs['ego'][2]
+        )
         
     def init_attitude_action_space(self) -> spaces.Box:
         """
@@ -147,12 +154,18 @@ class UAMEnv(gymnasium.Env):
         return np.array([roll_cmd, pitch_cmd, yaw_cmd, throttle_cmd])
         
     def __get_observation(self) -> dict:
+        # return self.backend_interface.get_observation()
         return {"ego": self.backend_interface.get_observation()}
         
     def __get_info(self) -> dict:
         return {}
     
-    def compute_reward(self) -> tuple:
+    def compute_distance_to_goal(self, x, y, z) -> float:
+        return np.sqrt((x - self.goal_position[0])**2 + \
+            (y - self.goal_position[1])**2 +\
+                (z - self.goal_position[2])**2)
+    
+    def get_reward(self) -> tuple:
         """
         This function will compute the reward for the agent
         based on the current state of the environment
@@ -163,6 +176,7 @@ class UAMEnv(gymnasium.Env):
         x = observation['ego'][0]
         y = observation['ego'][1]
         z = observation['ego'][2]
+        yaw = observation['ego'][5]
         
         # print("Current position", x, y, z)
                 
@@ -187,25 +201,36 @@ class UAMEnv(gymnasium.Env):
         dx = goal_x - x
         
         los_goal = np.arctan2(dy, dx)
+
+        #compute error between the current heading and the heading to the goal
+        error_heading = abs(los_goal - yaw)        
+        
         los_unit = np.array([np.cos(los_goal), np.sin(los_goal)])
         
         # print("obsevation ego yaw", observation['ego'][5])
-        ego_unit = np.array([np.cos(observation['ego'][5]), np.sin(observation['ego'][5])])
+        ego_unit = np.array([np.cos(yaw), np.sin(yaw)])
         
         dot_product = np.dot(los_unit, ego_unit)
         # print("Dot product", dot_product)
         
         distance = math.sqrt((x - goal_x)**2 + (y - goal_y)**2 + (z - goal_z)**2)
-        
+        # print("Distance", x, y, z, distance)
+        print("current heading", np.rad2deg(yaw), "desired heading", np.rad2deg(los_goal), "error heading", np.rad2deg(error_heading))
         if distance < self.distance_tolerance:
             print("Goal reached")
             return 1000, True
-        
+    
         # reward = dot_product - abs(dz)
         #print("Distance", distance, dot_product)
         #reward = np.exp(-0.5 * (distance**2))
-        reward = (1 / (1 + distance)) #+ dot_product
+        # reward = (1 / (1 + distance)) + dot_product - abs(dz)
         # print("Reward", reward, distance)
+        reward = -error_heading        
+        #we want to distance to the goal to decrease
+        # reward = -distance #self.old_distance_to_goal - distance
+        
+        #update the old distance to goal
+        self.old_distance_to_goal = distance
 
         return reward, False
         
@@ -221,7 +246,7 @@ class UAMEnv(gymnasium.Env):
         self.backend_interface.set_commands(real_action)
         self.backend_interface.run_backend()
         
-        step_reward,done = self.compute_reward()
+        step_reward,done = self.get_reward()
         
         reward += step_reward
         
@@ -249,12 +274,21 @@ class UAMEnv(gymnasium.Env):
             min_heading = self.state_constraints['min_psi']
             max_heading = self.state_constraints['max_psi']
             
-            random_vel = mps_to_knots(np.random.uniform(
-                min_vel, max_vel))
+            random_vel = np.random.uniform(min_vel, max_vel)
             
             random_heading = np.random.uniform(min_heading, 
                                                 max_heading)
             
+            
+            #wrap heading to [-pi, pi]
+            if random_heading >= np.pi:
+                print("Wrap heading")
+                random_heading -= 2*np.pi
+            elif random_heading <= -np.pi:
+                print("Wrap heading")
+                random_heading += 2*np.pi
+                            
+                    
             random_roll = np.random.uniform(
                 self.state_constraints['min_phi'],
                 self.state_constraints['max_phi'])
@@ -271,7 +305,7 @@ class UAMEnv(gymnasium.Env):
             random_alt_ft = meters_to_feet(np.random.uniform(40, 80))
             
             init_state_dict = {
-                "ic/u-fps": random_vel,
+                "ic/u-fps": meters_to_feet(random_vel),
                 "ic/v-fps": 0.0,
                 "ic/w-fps": 0.0,
                 "ic/p-rad_sec": 0.0,

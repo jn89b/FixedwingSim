@@ -526,7 +526,7 @@
 
     </aerodynamics>
 
-    <output name="JSBoutX8.csv" type="CSV" rate="10">
+    <!-- <output name="JSBoutX8.csv" type="CSV" rate="10">
         <rates> ON             </rates>
         <velocities> ON        </velocities>
         <position> ON          </position>
@@ -539,5 +539,5 @@
         <forces> OFF           </forces>
         <moments> OFF          </moments>
         <aerosurfaces> OFF      </aerosurfaces>
-    </output>
+    </output> -->
 </fdm_config>
