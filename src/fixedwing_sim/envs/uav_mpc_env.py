@@ -80,9 +80,9 @@ class MPCEnv(gymnasium.Env):
         self.use_random_start = use_random_start
         
         ## refactor this 
-        self.goal_position = [30, 40, 50]
+        self.goal_position = [50, 40, 50]
         self.distance_tolerance = 5
-        self.time_step_constant = 2000 #number of steps 
+        self.time_step_constant = 300 #number of steps 
         self.time_limit = self.time_step_constant
         
         init_obs = self.__get_observation()
@@ -259,14 +259,14 @@ class MPCEnv(gymnasium.Env):
         # print("Distance", x, y, z, distance)
         # print("current heading", np.rad2deg(yaw), "desired heading", np.rad2deg(los_goal), "error heading", np.rad2deg(error_heading))
         if distance < self.distance_tolerance:
-            print("Goal reached")
+            print("Goal reached", x, y, z, yaw, distance)
             return 1000, True
     
-        reward = -distance - self.old_distance_to_goal
+        # reward = -distance - self.old_distance_to_goal
         # reward = dot_product - abs(dz)
         #print("Distance", distance, dot_product)
         #reward = np.exp(-0.5 * (distance**2))
-        # reward = (1 / (1 + distance)) #+ dot_product - abs(dz)
+        reward = (1 / (1 + distance)) #+ dot_product - abs(dz)
         # print("Reward", reward, distance)
         # reward = -error_heading        
         #we want to distance to the goal to decrease
@@ -284,14 +284,13 @@ class MPCEnv(gymnasium.Env):
         constraints of the aircraft
         """
         reward = 0
-        
+        done = False
         real_action = self.map_normalized_action_to_real_action(action)
         observation = self.__get_observation()
         info = self.__get_info()
                 
         self.time_limit -= 1
         self.init_counter += 1
-        
 
         #check if the action is feasible 
         proj_x = observation['ego'][0] + real_action[0]
@@ -316,43 +315,43 @@ class MPCEnv(gymnasium.Env):
         # print("Projected position", proj_x, proj_y, proj_z)
         ## Right now penalize if it does illegal actions do action masking 
         # later on 
+        position_action = np.array([proj_x, proj_y, proj_z])
+        self.backend_interface.set_commands(position_action)
+        time_penalty = -0.01
+
         # if delta_psi > self.mpc_control_constraints['u_psi_max']:
         #     # print("Delta psi", delta_psi)
-        #     reward = -1000
-        #     done = True
-        #     return observation, reward, done, False, info
+        #     reward += 0 + time_penalty
+        #     #done = True
+        #     # return observation, reward, done, False, info
         
-        # # print("theta_max", np.rad2deg(self.mpc_control_constraints['u_theta_max']))
-        # if delta_theta > self.mpc_control_constraints['u_theta_max']:
+        # # # print("theta_max", np.rad2deg(self.mpc_control_constraints['u_theta_max']))
+        # elif delta_theta > self.mpc_control_constraints['u_theta_max']:
         #     # print("observation ego", observation['ego'])
         #     # print("current theta", np.rad2deg(observation['ego'][4]), 
         #     #       "desired theta", np.rad2deg(proj_theta), 
         #     #       "delta theta", np.rad2deg(delta_theta))
-        #     reward = -1000
-        #     done = True
-        #     return observation, reward, done, False, info
-        
-        
-        position_action = np.array([proj_x, proj_y, proj_z])
-        self.backend_interface.set_commands(position_action)
-        self.backend_interface.run_backend() 
+        #     reward += 0 + time_penalty
+        #     #done = True
+        #     #return observation, reward, done, False, info
+
+        # else:
         # self.backend_interface.run_backend()        
-        step_reward,done = self.get_reward()        
-        time_penalty = -1
+        step_reward,done = self.get_reward()
         reward   += step_reward + time_penalty 
 
-        if self.init_counter % 100 == 0:
-            print("Step", self.init_counter, self.time_limit)
-            print("x, y, z", observation['ego'][0], 
-                  observation['ego'][1], 
-                  observation['ego'][2])
+        # if self.init_counter % 300 == 0:
+        #     print("Step", self.init_counter, self.time_limit)
+        #     print("x, y, z", observation['ego'][0], 
+        #           observation['ego'][1], 
+        #           observation['ego'][2])
 
         if self.time_limit <= 0:
+            #print("Time limit reached", self.time_limit)
             done = True
         
-        
-        if done:
-            print("Episode done", reward)
+        # if done:
+        #     print("Episode done", reward, self.time_limit)
             
         #check if max episode steps reached
         return observation, reward, done, False, info
@@ -415,10 +414,10 @@ class MPCEnv(gymnasium.Env):
                 "ic/num_engines": 1,
             }
             
-            goal_x = 100#np.random.uniform(, 100)
-            goal_y = 100#np.random.uniform(-100, 100)
-            goal_z = 50 #np.random.uniform(40, 80)
-            self.goal_position = [goal_x, goal_y, goal_z]
+            # goal_x = 100#np.random.uniform(, 100)
+            # goal_y = 100#np.random.uniform(-100, 100)
+            # goal_z = 50 #np.random.uniform(40, 80)
+            # self.goal_position = [goal_x, goal_y, goal_z]
             
             self.backend_interface.init_conditions = init_state_dict
             self.backend_interface.reset_backend(

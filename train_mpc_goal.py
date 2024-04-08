@@ -33,8 +33,8 @@ def init_mpc_controller(mpc_control_constraints:dict,
     return plane_mpc
 
 
-LOAD_MODEL = False
-TOTAL_TIMESTEPS = 100000 #
+LOAD_MODEL = True
+TOTAL_TIMESTEPS = 500000#100000/2 #
 
 init_state_dict = {
     "ic/u-fps": mps_to_ktas(25),
@@ -94,7 +94,7 @@ state_constraints = {
     'theta_max': np.deg2rad(15),
     'psi_min':  -np.pi,
     'psi_max':   np.pi,
-    'airspeed_min': 13,
+    'airspeed_min': 15,
     'airspeed_max': 30
 }
 
@@ -111,7 +111,7 @@ aircraft = x8
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  aircraft=aircraft,
                                  use_mpc=True,
-                                 flight_dynamics_sim_hz=50,
+                                 flight_dynamics_sim_hz=200,
                                  mpc_controller=mpc_control)
 
 
@@ -146,37 +146,45 @@ x_ref = []
 y_ref = []
 z_ref = []
 
+if LOAD_MODEL:
+    model = PPO.load("simple_high_level")
+    print("model loaded")
 
-# model = PPO("MultiInputPolicy", 
-#             env,
-#             learning_rate=0.001,
-#             # clip_range=0.2,
-#             n_epochs=10,
-#             ent_coef=0.001,
-#             # seed=42, 
-#             verbose=1, tensorboard_log='tensorboard_logs/', 
-#             device='cuda')
+else:
+    model = PPO("MultiInputPolicy", 
+                env,
+                learning_rate=0.001,
+                # clip_range=0.2,
+                n_epochs=10,
+                ent_coef=0.001,
+                # seed=42, 
+                verbose=1, tensorboard_log='tensorboard_logs/', 
+                device='cuda')
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+    model.save("simple_high_level")
+    print("model saved")
+
+# #use DDPG
+# model = DDPG("MultiInputPolicy",
+#              env,
+#              learning_rate=0.001,
+#              verbose=1,
+#              tensorboard_log='tensorboard_logs/',
+#              device='cuda')
 # model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
 # model.save("simple_high_level")
 # print("model saved")
 
-#use DDPG
-model = DDPG("MultiInputPolicy",
-             env,
-             learning_rate=0.001,
-             verbose=1,
-             tensorboard_log='tensorboard_logs/',
-             device='cuda')
-model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
-model.save("simple_high_level")
-print("model saved")
-
-N = 500
+env.reset()
+N = 400
+goal_position = env.goal_position
 for i in range(N):
     action, _states = model.predict(obs, deterministic=True)
     obs, reward, done, _, info = env.step(action)
     if done:
+        print("simulation done")
         obs, info = env.reset()
+        break
     # print(obs)
     # print(rewards)
     # print(done)
@@ -191,7 +199,7 @@ for i in range(N):
 import matplotlib.pyplot as plt
 plt.rcParams.update(plt.rcParamsDefault)
 
-for i in range(N):
+for i in range(len(env.action_history)):
     action = env.action_history[i]
     x_ref.append(action[0])
     y_ref.append(action[1])
@@ -201,13 +209,17 @@ for i in range(N):
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 #plot start
-ax.scatter(x_history[0], y_history[0], z_history[0], c='r', marker='o')
+ax.scatter(x_history[0], y_history[0], z_history[0], c='r', 
+           marker='o', label='Start')
+ax.scatter(goal_position[0], goal_position[1], goal_position[2], c='g',
+              marker='o', label='Goal')
 ax.plot3D(x_history, y_history, z_history, 'gray')  
 ax.plot3D(x_ref, y_ref, z_ref, 'blue')
 ax.set_xlabel('X [m]')
 ax.set_ylabel('Y [m]')
-ax.set_xlim(-10, 100)
-ax.set_ylim(-10, 100)
+# ax.set_xlim(-10, 100)
+# ax.set_ylim(-10, 100)
+ax.legend()
 plt.show()
 
 

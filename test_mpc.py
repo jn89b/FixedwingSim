@@ -1,5 +1,6 @@
 import casadi as ca
 import numpy as np
+import time
 from src.models.Plane import Plane
 from opt_control.PlaneOptControl import PlaneOptControl
 from jsbsim_backend.aircraft import Aircraft, x8
@@ -53,12 +54,12 @@ mpc_params = {
 }
 
 rl_control_constraints = {
-    'x_min': -10,
-    'x_max': 10,
-    'y_min': -10,
-    'y_max': 10,
-    'z_min': -10,
-    'z_max': 10,
+    'x_min': -5.0,
+    'x_max': 5.0,
+    'y_min': -5.0,
+    'y_max': 5.0,
+    'z_min': -1,
+    'z_max': 1,
 }
 
 control_constraints = {
@@ -102,6 +103,7 @@ aircraft = x8
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  aircraft=aircraft,
                                  use_mpc=True,
+                                 flight_dynamics_sim_hz=200,
                                  mpc_controller=mpc_control)
 
 
@@ -128,25 +130,49 @@ action_test = [
 x_history = []
 y_history = []
 z_history = []
+roll_history = []
+pitch_history = []
+yaw_history = []
+
 t_history = []
+distance_history = []
+reward_history = []
 
 x_ref = []
 y_ref = []
 z_ref = []
 
-N = 500
+
+goal_position = env.goal_position
+
+N = 200
 for i in range(N):
-    obs, reward, done, _, info = env.step(action_test)
+    #get random action
+    
+    start_time = time.time()
+    action = env.action_space.sample()
+    obs, reward, done, _, info = env.step(action)
+    end_time = time.time()
+    print(f"Time taken for step {i}: {end_time - start_time}")
     # print(f"obs: {obs}, reward: {reward}, done: {done}, info: {info}")
     x = obs['ego'][0]
     y = obs['ego'][1]
     z = obs['ego'][2]
-    print("x: ", x, "y: ", y, "z: ", z)
-    print("\n")
+    roll = obs['ego'][3]
+    pitch = obs['ego'][4]
+    yaw = obs['ego'][5]
+    # print("x: ", x, "y: ", y, "z: ", z)
+    # print("\n")
     x_history.append(x)
     y_history.append(y)
     z_history.append(z)
+    roll_history.append(np.rad2deg(roll))
+    pitch_history.append(np.rad2deg(pitch))
+    yaw_history.append(np.rad2deg(yaw))
     
+    distance = np.sqrt((x - goal_position[0])**2 + (y - goal_position[1])**2 + (z - goal_position[2])**2)
+    distance_history.append(distance)
+    reward_history.append(reward)
 
 import matplotlib.pyplot as plt
 plt.rcParams.update(plt.rcParamsDefault)
@@ -157,18 +183,42 @@ for i in range(N):
     y_ref.append(action[1])
     z_ref.append(action[2])
 
+
 #plot 3d position
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 #plot start
 ax.scatter(x_history[0], y_history[0], z_history[0], c='r', marker='o')
 ax.plot3D(x_history, y_history, z_history, 'gray')  
-ax.plot3D(x_ref, y_ref, z_ref, 'blue')
+ax.plot3D(x_ref, y_ref, z_ref, 'blue', alpha=0.5)
 ax.set_xlabel('X [m]')
 ax.set_ylabel('Y [m]')
-ax.set_xlim(-10, 100)
-ax.set_ylim(-10, 100)
+# ax.set_xlim(-10, 100)
+# ax.set_ylim(-10, 100)
+
+fig,ax = plt.subplots(2,1)
+
+ax[0].plot(range(N), distance_history)
+ax[0].set_title('Distance to goal')
+ax[0].set_xlabel('Time [s]') 
+
+ax[1].plot(range(N), reward_history)
+ax[1].set_title('Reward')
+ax[1].set_xlabel('Time [s]')
+
+fig, ax = plt.subplots(3,1)
+ax[0].plot(range(N), roll_history)
+ax[0].set_title('Roll')
+
+ax[1].plot(range(N), pitch_history)
+ax[1].set_title('Pitch')
+
+ax[2].plot(range(N), yaw_history)
+ax[2].set_title('Yaw')
+
+print("Final time of simulation: ", env.backend_interface.sim.get_time())
 plt.show()
+
 
 
     

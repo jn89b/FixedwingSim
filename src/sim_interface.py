@@ -1,6 +1,6 @@
 from abc import ABC
 import numpy as np
-
+import time 
 from jsbsim_backend.simulator import FlightDynamics
 from jsbsim_backend.aircraft import Aircraft, x8
 from debug_utils import *
@@ -139,26 +139,11 @@ class OpenGymInterface(CLSimInterface):
                 init_states[5],
                 init_states[6]
             ]
+            
             solution_results, end_time = self.mpc_controller.get_solution(
                 init_states, final_states, init_control)
             
-            
-            for k in solution_results.keys():
-                # print(k, solution_results[k])
-                v_cmd = solution_results[k]
-                z_cmd = solution_results['z']
-                roll_cmd = solution_results['phi']
-                pitch_cmd = solution_results['theta']
-                heading_cmd = solution_results['psi']
-                airspeed_cmd = solution_results['v_cmd']
                 
-                #for i in range(len(v_cmd)):
-                # for i in range(5):
-                #     self.autopilot.altitude_hold(z_cmd[i])  
-                #     self.autopilot.heading_hold(np.rad2deg(heading_cmd[i]))
-                #     self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd[i]))
-                    #self.run_backend()
-                    
             #set the commands
             #idx_step = int((end_time - init_states['time']) * self.flight_dynamics_sim_hz)
             idx_step = 1
@@ -169,11 +154,24 @@ class OpenGymInterface(CLSimInterface):
             airspeed_cmd = solution_results['v_cmd'][idx_step]
 
             # self.autopilot.pitch_hold(pitch_cmd)
-            # self.autopilot.roll_hold(roll_cmd)
-            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
+            self.autopilot.roll_hold(roll_cmd)
+            #self.autopilot.heading_hold(np.rad2deg(heading_cmd))
             self.autopilot.altitude_hold(meters_to_feet(50))
             self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
-        
+                
+            #dt_controller = self.mpc_controller.mpc_params['dt']
+            #hz = int(1/dt_controller)
+            sim_hz = self.flight_dynamics_sim_hz
+            control_hz = 30
+            #relative_update = sim_hz // control_hz
+            
+            for i in range(sim_hz):
+                if i % control_hz == 0 and i != 0:
+                    # print("retuning")
+                    return
+                else:
+                    self.run_backend()
+               
     def reset_backend(self, init_conditions:dict=None) -> None:
         if init_conditions is not None:
             self.init_conditions = init_conditions
