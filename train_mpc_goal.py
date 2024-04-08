@@ -8,6 +8,7 @@ import gymnasium as gym
 from src.sim_interface import OpenGymInterface
 from src.conversions import meters_to_feet, mps_to_ktas
 
+from stable_baselines3.common.callbacks import CheckpointCallback
 
 from stable_baselines3 import PPO
 from stable_baselines3 import DDPG
@@ -33,7 +34,7 @@ def init_mpc_controller(mpc_control_constraints:dict,
     return plane_mpc
 
 
-LOAD_MODEL = True
+LOAD_MODEL = False
 TOTAL_TIMESTEPS = 500000#100000/2 #
 
 init_state_dict = {
@@ -151,6 +152,10 @@ if LOAD_MODEL:
     print("model loaded")
 
 else:
+    # Save a checkpoint every 1000 steps
+    checkpoint_callback = CheckpointCallback(save_freq=1000, save_path='./models/',
+                                            name_prefix='rl_model')
+
     model = PPO("MultiInputPolicy", 
                 env,
                 learning_rate=0.001,
@@ -160,7 +165,8 @@ else:
                 # seed=42, 
                 verbose=1, tensorboard_log='tensorboard_logs/', 
                 device='cuda')
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4, 
+                callback=checkpoint_callback)
     model.save("simple_high_level")
     print("model saved")
 
