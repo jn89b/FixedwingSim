@@ -69,7 +69,6 @@ class MPCEnv(gymnasium.Env):
         self.mpc_control_constraints = mpc_control_constraints
         self.state_constraints = state_constraints
         self.action_space = self.init_attitude_action_space()
-        print("Action Space: ", self.action_space)
         self.ego_obs_space = self.init_ego_observation()
         self.observation_space = spaces.Dict(
             {
@@ -80,7 +79,8 @@ class MPCEnv(gymnasium.Env):
         self.use_random_start = use_random_start
         
         ## refactor this 
-        self.goal_position = [50, 40, 50]
+        self.goal_position = [70, 40, 50]
+        #self.goal_position = [0, 0, 0]
         self.distance_tolerance = 5
         self.time_step_constant = 300 #number of steps 
         self.time_limit = self.time_step_constant
@@ -228,11 +228,11 @@ class MPCEnv(gymnasium.Env):
                         
         if z > 100:
             print("Crashed", x, y, z, yaw)
-            return -100, True
+            return -1000, True
         
         if z < 0:
             print("Crashed", x, y, z, yaw)
-            return -100, True
+            return -1000, True
     
         goal_x = self.goal_position[0]
         goal_y = self.goal_position[1]
@@ -266,7 +266,8 @@ class MPCEnv(gymnasium.Env):
         # reward = dot_product - abs(dz)
         #print("Distance", distance, dot_product)
         #reward = np.exp(-0.5 * (distance**2))
-        reward = (1 / (1 + distance)) #+ dot_product - abs(dz)
+        #
+        reward = (1 / (1 + distance)) + (1/(1+abs(dz))) #+ dot_product - abs(dz)
         # print("Reward", reward, distance)
         # reward = -error_heading        
         #we want to distance to the goal to decrease
@@ -338,7 +339,7 @@ class MPCEnv(gymnasium.Env):
         # else:
         # self.backend_interface.run_backend()        
         step_reward,done = self.get_reward()
-        reward   += step_reward + time_penalty 
+        reward   += step_reward #+ time_penalty 
 
         # if self.init_counter % 300 == 0:
         #     print("Step", self.init_counter, self.time_limit)
@@ -346,9 +347,9 @@ class MPCEnv(gymnasium.Env):
         #           observation['ego'][1], 
         #           observation['ego'][2])
 
-        if self.time_limit <= 0:
-            #print("Time limit reached", self.time_limit)
-            done = True
+        # if self.time_limit <= 0:
+        #     #print("Time limit reached", self.time_limit)
+        #     done = True
         
         # if done:
         #     print("Episode done", reward, self.time_limit)
@@ -414,10 +415,10 @@ class MPCEnv(gymnasium.Env):
                 "ic/num_engines": 1,
             }
             
-            # goal_x = 100#np.random.uniform(, 100)
-            # goal_y = 100#np.random.uniform(-100, 100)
-            # goal_z = 50 #np.random.uniform(40, 80)
-            # self.goal_position = [goal_x, goal_y, goal_z]
+            goal_x = np.random.uniform(30, 60)
+            goal_y = np.random.uniform(30, 60)
+            goal_z = np.random.uniform(30, 60)
+            self.goal_position = [goal_x, goal_y, goal_z]
             
             self.backend_interface.init_conditions = init_state_dict
             self.backend_interface.reset_backend(

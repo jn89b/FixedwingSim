@@ -212,24 +212,46 @@ class FlightDynamics:
         sim_time = self[prp.sim_time_s]
         return sim_time
 
+    def local_to_global_position(self, local_position: list) -> list:
+        """Converts local position (in meters) to 
+        global position (degrees and meters for altitude).
+        """
+        
+        # Conversion factors
+        meters_per_degree_latitude = 111320
+        equatorial_circumference_meters = 40075000
+        
+        x_meters, y_meters, z_meters = local_position
+        lat_degrees = y_meters / meters_per_degree_latitude
+        lon_degrees = (x_meters / (equatorial_circumference_meters * math.cos(math.radians(lat_degrees)) / 360))
+        
+        return [lon_degrees, lat_degrees, z_meters]
+
     def get_local_position(self) -> list:
         """
         Get the local absolute position from the simulation start point
         :return: position [lat, long, alt]
         """
-        # lat = self[prp.lat_travel_m]
-        # long = self[prp.lng_travel_m]
-        lat = 111320 * self[prp.lat_geod_deg]
-        lon = 40075000 * self[prp.lng_geoc_deg] * math.cos(self[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
-        alt = self[prp.altitude_sl_ft]
+        # y = 111320 * self[prp.lat_geod_deg]
+        # x = 40075000 * self[prp.lng_geoc_deg] * math.cos(self[prp.lat_geod_deg] * \
+        #     (math.pi / 180.0)) / 360
+        # z = self[prp.altitude_sl_ft]
+                
+        lat_degrees = self[prp.lat_geod_deg]
+        lon_degrees = self[prp.lng_geoc_deg]
+        alt_meters = feet_to_meters(self[prp.altitude_sl_ft])
+        # lon_degrees, lat_degrees, alt_meters = geo_coords
+        lat_meters = lat_degrees * 111320
+        lon_meters = (lon_degrees * (40075000 * math.cos(math.radians(lat_degrees)) / 360))
+
+        # if self.return_metric_units:
+        #     y = feet_to_meters(y)
+        #     x = feet_to_meters(x)
+        #     z = feet_to_meters(z)
         
-        if self.return_metric_units:
-            lat = feet_to_meters(lat)
-            lon = feet_to_meters(lon)
-            alt = feet_to_meters(alt)
-            
-        position = [lon, lat, alt]
-        return position
+        # position = [x, y, z]
+        # return position
+        return [lon_meters, lat_meters, alt_meters]
 
     def get_local_orientation(self) -> list:
         """

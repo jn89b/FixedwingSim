@@ -35,7 +35,8 @@ def init_mpc_controller(mpc_control_constraints:dict,
 
 
 LOAD_MODEL = False
-TOTAL_TIMESTEPS = 500000#100000/2 #
+TOTAL_TIMESTEPS = 1000000#100000/2 #
+CONTINUE_TRAINING = False
 
 init_state_dict = {
     "ic/u-fps": mps_to_ktas(25),
@@ -87,8 +88,8 @@ state_constraints = {
     'x_max': np.inf,
     'y_min': -np.inf,
     'y_max': np.inf,
-    'z_min': -10,
-    'z_max': 70,
+    'z_min': 30,
+    'z_max': 100,
     'phi_min':  -np.deg2rad(45),
     'phi_max':   np.deg2rad(45),
     'theta_min':-np.deg2rad(15),
@@ -115,13 +116,12 @@ gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  flight_dynamics_sim_hz=200,
                                  mpc_controller=mpc_control)
 
-
-
 #show all registered environments
 # print(gym.envs.registry.keys())
 
 #### This is the environment that will be used for training
 env = gym.make('MPCEnv', 
+               use_random_start = True,
                backend_interface=gym_adapter,
                rl_control_constraints=rl_control_constraints,
                mpc_control_constraints=control_constraints,
@@ -146,23 +146,35 @@ t_history = []
 x_ref = []
 y_ref = []
 z_ref = []
+distance_history = []
 
-if LOAD_MODEL:
+# Save a checkpoint every 1000 steps
+checkpoint_callback = CheckpointCallback(save_freq=10000, save_path='./models/ppo_3/',
+                                        name_prefix='rl_model')
+
+if LOAD_MODEL and not CONTINUE_TRAINING:
     model = PPO.load("simple_high_level")
     print("model loaded")
-
+elif LOAD_MODEL and CONTINUE_TRAINING:
+    
+    model = PPO.load("simple_high_level")
+    model.set_env(env)
+    print("model loaded and continuing training")
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4,
+                callback=checkpoint_callback)
+    model.save("simple_high_level")
+    print("model saved")
+    
 else:
-    # Save a checkpoint every 1000 steps
-    checkpoint_callback = CheckpointCallback(save_freq=1000, save_path='./models/',
-                                            name_prefix='rl_model')
 
     model = PPO("MultiInputPolicy", 
                 env,
                 learning_rate=0.001,
+                gamma=0.9,
                 # clip_range=0.2,
                 n_epochs=10,
                 ent_coef=0.001,
-                # seed=42, 
+                seed=42, 
                 verbose=1, tensorboard_log='tensorboard_logs/', 
                 device='cuda')
     model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4, 
@@ -182,7 +194,7 @@ else:
 # print("model saved")
 
 env.reset()
-N = 400
+N = 150
 goal_position = env.goal_position
 for i in range(N):
     action, _states = model.predict(obs, deterministic=True)
@@ -191,17 +203,15 @@ for i in range(N):
         print("simulation done")
         obs, info = env.reset()
         break
-    # print(obs)
-    # print(rewards)
-    # print(done)
-    # print(info)
     x = obs['ego'][0]
     y = obs['ego'][1]
     z = obs['ego'][2]
     x_history.append(x)
     y_history.append(y)
     z_history.append(z)
-
+    distance = np.linalg.norm(np.array([x, y, z]) - goal_position)
+    distance_history.append(distance)
+    
 import matplotlib.pyplot as plt
 plt.rcParams.update(plt.rcParamsDefault)
 
@@ -223,10 +233,10 @@ ax.plot3D(x_history, y_history, z_history, 'gray')
 ax.plot3D(x_ref, y_ref, z_ref, 'blue')
 ax.set_xlabel('X [m]')
 ax.set_ylabel('Y [m]')
-# ax.set_xlim(-10, 100)
-# ax.set_ylim(-10, 100)
+ax.set_zlabel('Z [m]')
+ax.set_zlim(10, 70)
 ax.legend()
+
+fig, ax = plt.subplots()
+ax.plot(distance_history)
 plt.show()
-
-
-    

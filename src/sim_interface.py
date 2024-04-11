@@ -30,7 +30,7 @@ class CLSimInterface():
         self.init_conditions = init_conditions
         self.aircraft = aircraft
         self.flight_dynamics_sim_hz = flight_dynamics_sim_hz
-        
+                
         #this will initialize the simulator with the aircraft and initial conditions
         self.sim = FlightDynamics(aircraft=aircraft, 
                                   init_conditions=init_conditions, 
@@ -68,36 +68,23 @@ class OpenGymInterface(CLSimInterface):
     def __init__(self, 
                  init_conditions: dict,
                  aircraft: Aircraft = x8,
-                 flight_dynamics_sim_hz: float = 50,
+                 flight_dynamics_sim_hz: float = 100,
                  autopilot: X8Autopilot = None,
                  use_mpc: bool = False,
                  mpc_controller: PlaneOptControl = None,
                  debug_level: int = 0):
         
-        # Remove the call to super().__init__()
+        super().__init__(init_conditions=init_conditions,
+                         aircraft=aircraft,
+                         flight_dynamics_sim_hz=flight_dynamics_sim_hz,
+                         autopilot=autopilot,
+                         debug_level=debug_level)
         
-        self.init_conditions = init_conditions
-        self.aircraft = aircraft
-        self.flight_dynamics_sim_hz = flight_dynamics_sim_hz
+        # Additional initialization for OpenGymInterface
         self.use_mpc = use_mpc
         self.mpc_controller = mpc_controller
         if self.use_mpc and self.mpc_controller is None:
             raise ValueError("MPC Controller not provided")
-
-        #this will initialize the simulator with the aircraft and initial conditions
-        self.sim = FlightDynamics(aircraft=aircraft, 
-                                  init_conditions=init_conditions, 
-                                  debug_level=debug_level,
-                                  sim_frequency_hz=flight_dynamics_sim_hz)
-        
-        self.autopilot = autopilot
-        if self.autopilot is None:
-            self.autopilot = X8Autopilot(self.sim)
-            
-        self.wind = WindEstimation(self.sim)
-        self.report = ReportGraphs(self.sim)
-        self.over = False
-        self.graph = DebugGraphs(self.sim)
 
     def set_commands(self, action:np.ndarray, 
                      init_states_mpc:np.ndarray=None) -> None:
@@ -129,7 +116,6 @@ class OpenGymInterface(CLSimInterface):
                 0,
                 20
             ]
-            #print("action", action)
             #feed it to the mpc controller 
             init_states = self.get_observation()
             # print("init_states", init_states)
@@ -142,10 +128,8 @@ class OpenGymInterface(CLSimInterface):
             
             solution_results, end_time = self.mpc_controller.get_solution(
                 init_states, final_states, init_control)
-            
-                
+
             #set the commands
-            #idx_step = int((end_time - init_states['time']) * self.flight_dynamics_sim_hz)
             idx_step = 1
             z_cmd = solution_results['z'][idx_step]
             roll_cmd = solution_results['phi'][idx_step]
@@ -154,11 +138,11 @@ class OpenGymInterface(CLSimInterface):
             airspeed_cmd = solution_results['v_cmd'][idx_step]
 
             # self.autopilot.pitch_hold(pitch_cmd)
-            self.autopilot.roll_hold(roll_cmd)
-            #self.autopilot.heading_hold(np.rad2deg(heading_cmd))
-            self.autopilot.altitude_hold(meters_to_feet(50))
+            #self.autopilot.roll_hold(roll_cmd)
+            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
+            self.autopilot.altitude_hold(meters_to_feet(z_cmd))
             self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
-                
+                            
             #dt_controller = self.mpc_controller.mpc_params['dt']
             #hz = int(1/dt_controller)
             sim_hz = self.flight_dynamics_sim_hz
@@ -188,7 +172,6 @@ class OpenGymInterface(CLSimInterface):
         Returns the observation space for the environment as 
         a numpy array 
         """
-        
         state_dict = self.sim.get_states()
         states = [
             state_dict['x'],
