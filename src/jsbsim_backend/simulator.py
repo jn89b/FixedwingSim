@@ -80,7 +80,7 @@ class FlightDynamics:
     #ROOT_DIR = os.path.abspath(r"c:\Users\quessy\Dev\jsbsim")
     
     def __init__(self,
-                 sim_frequency_hz: float = 60.0,
+                 sim_frequency_hz: float = 100.0,
                  aircraft: Aircraft = x8,
                  init_conditions:Dict = None,
                  return_metric_units: bool = True,

@@ -9,8 +9,10 @@ from gymnasium.utils import seeding
 
 from jsbsim_backend.aircraft import Aircraft, x8
 from jsbsim_backend.simulator import FlightDynamics
-from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
-from sim_interface import CLSimInterface, OpenGymInterface
+from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots, mps_to_ktas
+from sim_interface import CLSimInterface, OpenGymInterface, PursuerInterface
+from conversions import local_to_global_position
+
 
 from guidance_control.autopilot import X8Autopilot
 from opt_control.PlaneOptControl import PlaneOptControl
@@ -19,19 +21,8 @@ from models.Plane import Plane
 
 from stable_baselines3.common.callbacks import BaseCallback
 
-# class ActionHistoryCallback(BaseCallback):
-#     def __init__(self, verbose=0):
-#         super(ActionHistoryCallback, self).__init__(verbose)
-#         self.action_history = []
 
-#     def _on_step(self) -> bool:
-#         # Assuming `self.training_env` is a VecEnv, we take the last action from the buffer
-#         # For a single environment, you might directly use `self.model.action` or modify accordingly
-#         actions = self.model.action_buffer
-#         self.action_history.extend(actions)
-#         return True
-
-class MPCEnv(gymnasium.Env):
+class PursuerEnv(gymnasium.Env):
     """
     Interfaces with MPC controller and JSBSim simulator
     requires mpc controller to be running in the background
@@ -53,48 +44,135 @@ class MPCEnv(gymnasium.Env):
                  rl_control_constraints:dict=None,
                  mpc_control_constraints:dict=None,
                  state_constraints:dict=None,
+                 num_pursuers:int=3,
+                 start_distance_from_ego:float=50,
+                 distance_capture:float=10,
+                 pursuer_velocities:np.ndarray=np.ndarray([15, 40]),
                  render_mode:str=None,
                  render_fps:int=7, 
                  use_random_start:bool=False) -> None:
-        super(MPCEnv, self).__init__()
+        super(PursuerEnv, self).__init__()
         
         #check to see if mpc_params is a dictionary
         if not isinstance(mpc_control_constraints, dict):
             raise ValueError("No MPC control constraints provided.")
         
-
         self.action_history = []
         self.backend_interface = backend_interface
         self.rl_control_constraints = rl_control_constraints
         self.mpc_control_constraints = mpc_control_constraints
         self.state_constraints = state_constraints
+        
+        self.num_pursuers = num_pursuers
+        self.start_distance_from_ego = start_distance_from_ego
+        self.distance_tolerance = distance_capture
+        self.pursuer_velocities = pursuer_velocities
+        
         self.action_space = self.init_attitude_action_space()
         self.ego_obs_space = self.init_ego_observation()
+        
         self.observation_space = spaces.Dict(
             {
                 "ego": self.ego_obs_space
             }
         )
-
-        self.use_random_start = use_random_start
         
-        ## refactor this 
-        self.goal_position = [70, 40, 50]
-        #self.goal_position = [0, 0, 0]
-        self.distance_tolerance = 5
-        self.time_step_constant = 300 #number of steps 
-        self.time_limit = self.time_step_constant
-        
-        init_obs = self.__get_observation()
-        
-        self.old_distance_to_goal = self.compute_distance_to_goal(
-            init_obs['ego'][0],
-            init_obs['ego'][1],
-            init_obs['ego'][2]
-        )
-
+        self.use_random_start = use_random_start        
+        self.distance_tolerance = 15
+        self.time_step_constant = 300 #number of steps
+        #need to figure out the relationship between time and steps 
+        self.time_limit = self.time_step_constant 
         self.init_counter = 0
+        self.pursuers = self.init_pursuers(num_pursuers)
+        
+
+    def compute_distance(self, p1:np.ndarray, p2:np.ndarray) -> float:
+        return np.linalg.norm(p1-p2)
+        
+    def init_pursuers(self, num_pursuers:int) -> list[PursuerInterface]:
+        """
+        Generate pursuers that will be used to track the ego aircraft
+        """
+        pursuers  = []
+        init_count = 0
+        ego_obs = self.backend_interface.get_observation()
+        #ego_pos = np.array([ego_obs['x'], ego_obs['y'], ego_obs['z']])
+        ego_pos = ego_obs[:3]
+
+        while init_count < num_pursuers:
+            
+            rand_x = np.random.uniform(ego_pos[0]-self.start_distance_from_ego, 
+                                       ego_pos[0]+self.start_distance_from_ego)
+            rand_y = np.random.uniform(ego_pos[1]-self.start_distance_from_ego,
+                                        ego_pos[1]+self.start_distance_from_ego)
+
+            rand_z = np.random.uniform(ego_pos[2]-self.start_distance_from_ego/2,
+                                        ego_pos[2]+self.start_distance_from_ego/2)
+            
+            pursuer_vel = np.random.uniform(15, 40)
+            random_heading = np.random.uniform(-np.pi, np.pi)
+            pursuer_geo_pos = local_to_global_position([rand_x, rand_y, rand_z])
+            
+            random_heading = ego_obs[5]
+            pursuer_init_conditions = {
+                "ic/u-fps": mps_to_ktas(pursuer_vel),
+                "ic/v-fps": 0.0,
+                "ic/w-fps": 0.0,
+                "ic/p-rad_sec": 0.0,
+                "ic/q-rad_sec": 0.0,
+                "ic/r-rad_sec": 0.0,
+                "ic/h-sl-ft": meters_to_feet(pursuer_geo_pos[2]),
+                "ic/long-gc-deg": pursuer_geo_pos[0],
+                "ic/lat-gc-deg": pursuer_geo_pos[1],
+                "ic/psi-true-deg": np.rad2deg(random_heading),
+                "ic/theta-deg": 0.0,
+                "ic/phi-deg": 0.0,
+                "ic/alpha-deg": 0.0,
+                "ic/beta-deg": 0.0,
+                "ic/num_engines": 1,
+            }
+            
+            #this is bad I don't need to use this 
+            control_constraints = {
+                'u_phi_min':  -np.deg2rad(45),
+                'u_phi_max':   np.deg2rad(45),
+                'u_theta_min':-np.deg2rad(10),
+                'u_theta_max': np.deg2rad(10),
+                'u_psi_min':  -np.deg2rad(45),
+                'u_psi_max':   np.deg2rad(45),
+                'v_cmd_min':   15,
+                'v_cmd_max':   30
+            }
+            
+            pursuer = PursuerInterface(
+                init_conditions=pursuer_init_conditions,
+                evader_position=[0, 0, 0],
+                control_constraints=control_constraints,
+                min_max_vels=[15,40],
+                id_number=init_count,
+                flight_dynamics_sim_hz=self.backend_interface.flight_dynamics_sim_hz,
+            )
+            
+            pursuer_obs = pursuer.get_observation()
+            pursuer_pos = pursuer_obs[:3]                
+            distance = self.compute_distance(ego_pos, pursuer_pos)
+            if distance > self.start_distance_from_ego:   
+                pursuers.append(pursuer)
+                init_count += 1
+                # print("Pursuer {} initialized".format(init_count))
+            else:
+                continue
+        
+        #send initial commands to pursuers
+        evader_observation = self.backend_interface.get_observation()
+        for pursuer in pursuers:
+            pursuer_height = pursuer.get_observation()[2]
+            turn_cmd, v_cmd = pursuer.pursuit_nav(evader_observation)
+            dz = evader_observation[2] - pursuer_height
+            pursuer.set_command(np.deg2rad(turn_cmd), v_cmd, pursuer_height+dz)
     
+        return pursuers
+
     def init_attitude_action_space(self) -> spaces.Box:
         """        
         NOTE for the yaw/heading command it must be in degrees for the 
@@ -156,6 +234,12 @@ class MPCEnv(gymnasium.Env):
         high_obs.append(self.state_constraints['airspeed_max'])
         low_obs.append(self.state_constraints['airspeed_min'])
         
+        #add pursuers to the observation space this will be 
+        #the distance to the pursuers
+        for i in range(self.num_pursuers):
+            low_obs.append(-np.inf)
+            high_obs.append(np.inf)
+        
         obs_space = spaces.Box(low=np.array(low_obs),
                                             high=np.array(high_obs),
                                             dtype=np.float32)
@@ -193,66 +277,60 @@ class MPCEnv(gymnasium.Env):
         return np.array([x_cmd, y_cmd, z_cmd])
         
     def __get_observation(self) -> dict:
-        # return self.backend_interface.get_observation()
-        return {"ego": self.backend_interface.get_observation()}
+        ego_obs = self.backend_interface.get_observation()
+        #update observation space with pursuer distance
+        for pursuer in self.pursuers:
+            pursuer_pos = pursuer.get_observation()[:3]
+            distance = self.compute_distance(ego_obs[:3], pursuer_pos)
+            ego_obs = np.append(ego_obs, distance)
         
+        obs = {"ego": ego_obs}
+    
+        return obs
+    
     def __get_info(self) -> dict:
-        return {}
-    
-    def compute_distance_to_goal(self, x, y, z) -> float:
-        return np.sqrt((x - self.goal_position[0])**2 + \
-            (y - self.goal_position[1])**2 +\
-                (z - self.goal_position[2])**2)
-    
+        info = {}
+        for pursuer in self.pursuers:
+            info["pursuer_{}".format(pursuer.id)] = pursuer.get_observation()
+        
+        return info
+        
     def get_reward(self) -> tuple:
         """
         This function will compute the reward for the agent
         based on the current state of the environment
         Very simple right now just get the distance to the goal
         """
+        reward = 0          
+        ego_obs = self.__get_observation()
+        ego_pos = ego_obs['ego'][:3]
+        
+        #check time limit
+        if self.time_limit <= 0:
+            reward = 1000
+            print("Time limit reached you survived!")
+            return reward, True
 
-        observation = self.__get_observation()
-        x = observation['ego'][0]
-        y = observation['ego'][1]
-        z = observation['ego'][2]
-        yaw = observation['ego'][5]
-                        
-        if z > 100:
-            print("Crashed", x, y, z, yaw)
-            return -1000, True
-        
-        if z < 0:
-            print("Crashed", x, y, z, yaw)
-            return -1000, True
-    
-        goal_x = self.goal_position[0]
-        goal_y = self.goal_position[1]
-        goal_z = self.goal_position[2]
-
-        dz = goal_z - z
-        dy = goal_y - y
-        dx = goal_x - x
-        
-        los_goal = np.arctan2(dy, dx)
-        #compute error between the current heading and the heading to the goal
-        error_heading = abs(los_goal - yaw)        
-        
-        los_unit = np.array([np.cos(los_goal), np.sin(los_goal)])
-        
-        ego_unit = np.array([np.cos(yaw), np.sin(yaw)])
-        
-        dot_product = np.dot(los_unit, ego_unit)
-        
-        distance = math.sqrt((x - goal_x)**2 + (y - goal_y)**2 + (z - goal_z)**2)
-        
-        if distance < self.distance_tolerance:
-            print("Goal reached", x, y, z, yaw, distance)
-            return 1000, True
-    
-        #
-        reward = (1 / (1 + distance)) + (1/(1+abs(dz))) #+ dot_product - abs(dz)
-        self.old_distance_to_goal = distance 
-        
+        #this is redundant but I will keep it for now
+        for pursuer in self.pursuers:
+            pursuer_obs = pursuer.get_observation()
+            pursuer_pos = pursuer_obs[:3]
+            #pursuer_pos = np.array([pursuer_obs['x'], pursuer_obs['y'], pursuer_obs['z']])
+            distance = self.compute_distance(ego_pos, pursuer_pos)
+            
+            #update observation space with pursuer distance   
+            
+            if distance < self.distance_tolerance:
+                reward = -1000
+                print("Pursuer caught the ego", distance)
+                return reward, True
+            else:
+                #reward for being far from pursuer
+                #clip the distance reward
+                distance_reward = distance
+                distance_reward = np.clip(distance_reward, 0, 100)
+                reward += distance_reward
+                
         return reward, False
         
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
@@ -278,7 +356,6 @@ class MPCEnv(gymnasium.Env):
         dx = proj_x - observation['ego'][0]
         dy = proj_y - observation['ego'][1]
         proj_theta = np.arctan2(dz, np.sqrt(dx**2 + dy**2))
-        delta_theta = abs(proj_theta - observation['ego'][4])
         delta_psi = abs(proj_psi - observation['ego'][5])
         
         #Wrap delta psi
@@ -288,57 +365,35 @@ class MPCEnv(gymnasium.Env):
             delta_psi = 2 * np.pi + delta_psi
         
         self.action_history.append((proj_x, proj_y, proj_z))
-                
-        # print("Projected position", proj_x, proj_y, proj_z)
-        ## Right now penalize if it does illegal actions do action masking 
-        # later on 
+ 
         position_action = np.array([proj_x, proj_y, proj_z])
-        self.backend_interface.set_commands(position_action)
-        time_penalty = -0.01
-
-        # if delta_psi > self.mpc_control_constraints['u_psi_max']:
-        #     # print("Delta psi", delta_psi)
-        #     reward += 0 + time_penalty
-        #     #done = True
-        #     # return observation, reward, done, False, info
+        #self.backend_interface.set_commands(position_action)
+        self.backend_interface.set_commands_w_pursuers(position_action, 
+                                                       self.pursuers)
+        # for pursuer in self.pursuers:
+        #     pursuer_height = pursuer.get_observation()[2]
+        #     turn_cmd, v_cmd = pursuer.pursuit_nav(observation['ego'])
+        #     dz = observation['ego'][2] - pursuer_height
+        #     pursuer.set_command(np.deg2rad(turn_cmd), v_cmd, pursuer_height+dz)
         
-        # # # print("theta_max", np.rad2deg(self.mpc_control_constraints['u_theta_max']))
-        # elif delta_theta > self.mpc_control_constraints['u_theta_max']:
-        #     # print("observation ego", observation['ego'])
-        #     # print("current theta", np.rad2deg(observation['ego'][4]), 
-        #     #       "desired theta", np.rad2deg(proj_theta), 
-        #     #       "delta theta", np.rad2deg(delta_theta))
-        #     reward += 0 + time_penalty
-        #     #done = True
-        #     #return observation, reward, done, False, info
-
-        # else:
-        # self.backend_interface.run_backend()        
         step_reward,done = self.get_reward()
         reward   += step_reward #+ time_penalty 
 
-        # if self.init_counter % 300 == 0:
-        #     print("Step", self.init_counter, self.time_limit)
-        #     print("x, y, z", observation['ego'][0], 
-        #           observation['ego'][1], 
-        #           observation['ego'][2])
-
-        # if self.time_limit <= 0:
-        #     #print("Time limit reached", self.time_limit)
-        #     done = True
-        
-        # if done:
-        #     print("Episode done", reward, self.time_limit)
+        if self.init_counter % 300 == 0:
+            print("Step", self.init_counter, self.time_limit)
+            print("x, y, z", 
+                  observation['ego'][0], 
+                  observation['ego'][1], 
+                  observation['ego'][2])
             
+        print("time limit", self.time_limit)
         #check if max episode steps reached
         return observation, reward, done, False, info
     
     def reset(self, seed=None) -> Any:
         
         if seed is not None or self.use_random_start:
-            # self.np_random, seed = seeding.np_random(seed)
-            #randomize the initial conditions
-            #this needs to be refactored
+            print("Random start")
             min_vel = self.state_constraints['airspeed_min']
             max_vel = self.state_constraints['airspeed_max']
             
@@ -366,15 +421,11 @@ class MPCEnv(gymnasium.Env):
                 self.state_constraints['theta_min'],
                 self.state_constraints['theta_max'])
             
-            #move lat and lon to random position within a small radius
-            # random_lat_dg = np.random.uniform(-0.0001, 0.0001)
-            # random_lon_dg = np.random.uniform(-0.0001, 0.0001)
             random_lat_dg = 0.0
             random_lon_dg = 0.0
             random_alt_ft = meters_to_feet(np.random.uniform(40, 80))
-            
             init_state_dict = {
-                "ic/u-fps": meters_to_feet(random_vel),
+                "ic/u-fps": mps_to_ktas(random_vel),
                 "ic/v-fps": 0.0,
                 "ic/w-fps": 0.0,
                 "ic/p-rad_sec": 0.0,
@@ -390,19 +441,18 @@ class MPCEnv(gymnasium.Env):
                 "ic/beta-deg": 0.0,
                 "ic/num_engines": 1,
             }
-            
-            goal_x = np.random.uniform(30, 60)
-            goal_y = np.random.uniform(30, 60)
-            goal_z = np.random.uniform(30, 60)
-            self.goal_position = [goal_x, goal_y, goal_z]
-            
+        
             self.backend_interface.init_conditions = init_state_dict
             self.backend_interface.reset_backend(
                 init_conditions=init_state_dict)
-            # print("Randomized initial conditions", init_state_dict)
+            
+            self.pursuers = self.init_pursuers(self.num_pursuers)
                         
         else:    
             self.backend_interface.reset_backend()
+        
+            for pursuer in self.pursuers:
+                pursuer.reset_backend()
         
         observation = self.__get_observation()
         info = self.__get_info()

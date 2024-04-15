@@ -17,3 +17,10 @@ register(
     entry_point='fixedwing_sim.envs.uav_mpc_env:MPCEnv',
     max_episode_steps=1000,
 )
+
+register(
+    id='PursuerEnv-v0',
+    entry_point='fixedwing_sim.envs.pursuer_env:PursuerEnv',
+    max_episode_steps=1000,
+)
+
