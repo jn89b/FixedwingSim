@@ -311,6 +311,16 @@ class PursuerEnv(gymnasium.Env):
             print("Time limit reached you survived!")
             return reward, True
 
+        if ego_pos[2] < self.state_constraints['z_min']:
+            reward = -1000
+            print("Crashed into the ground")
+            return reward, True
+        
+        if ego_pos[2] > self.state_constraints['z_max']:
+            reward = -1000
+            print("Flew too high sky")
+            return reward, True
+
         #this is redundant but I will keep it for now
         for pursuer in self.pursuers:
             pursuer_obs = pursuer.get_observation()
@@ -328,7 +338,7 @@ class PursuerEnv(gymnasium.Env):
                 #reward for being far from pursuer
                 #clip the distance reward
                 distance_reward = distance
-                distance_reward = np.clip(distance_reward, 0, 100)
+                distance_reward = np.clip(distance_reward, 0, 10)
                 reward += distance_reward
                 
         return reward, False
@@ -378,7 +388,6 @@ class PursuerEnv(gymnasium.Env):
         
         step_reward,done = self.get_reward()
         reward   += step_reward #+ time_penalty 
-
         if self.init_counter % 300 == 0:
             print("Step", self.init_counter, self.time_limit)
             print("x, y, z", 
@@ -386,7 +395,6 @@ class PursuerEnv(gymnasium.Env):
                   observation['ego'][1], 
                   observation['ego'][2])
             
-        print("time limit", self.time_limit)
         #check if max episode steps reached
         return observation, reward, done, False, info
     

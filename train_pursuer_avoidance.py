@@ -20,6 +20,7 @@ from stable_baselines3.common.env_checker import check_env
 Test the MPC imports
 """
 
+
 class DataHandler():
     def __init__(self) -> None:
         self.x = []
@@ -31,7 +32,7 @@ class DataHandler():
         self.y.append(info_array[1])
         self.z.append(info_array[2])
     
-
+    
 def init_mpc_controller(mpc_control_constraints:dict,
                         state_constraints:dict,
                         mpc_params:dict, 
@@ -46,7 +47,7 @@ def init_mpc_controller(mpc_control_constraints:dict,
     return plane_mpc
 
 
-LOAD_MODEL = False
+LOAD_MODEL = True
 TOTAL_TIMESTEPS = 1000000#100000/2 #
 CONTINUE_TRAINING = False
 
@@ -125,6 +126,7 @@ aircraft = x8
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  aircraft=aircraft,
                                  use_mpc=True,
+                                 flight_dynamics_sim_hz=200,
                                  mpc_controller=mpc_control)
 
 #show all registered environments
@@ -143,7 +145,69 @@ env._max_episode_steps = 1000
 obs, info = env.reset()
 print("enviroment created")
 
-N = 1000
+# action_test = [
+#     1.0, # move x direction
+#     0.0, # move y direction
+#     0.0  # move z direction
+# ]
+
+x_history = []
+y_history = []
+z_history = []
+t_history = []
+
+x_ref = []
+y_ref = []
+z_ref = []
+distance_history = []
+
+# Save a checkpoint every 1000 steps
+model_name ="pursuer_avoidance"
+checkpoint_callback = CheckpointCallback(save_freq=10000, save_path='./models/'+model_name+'_1/',
+                                        name_prefix=model_name)
+
+if LOAD_MODEL and not CONTINUE_TRAINING:
+    model = PPO.load(model_name)
+    print("model loaded")
+elif LOAD_MODEL and CONTINUE_TRAINING:
+    
+    model = PPO.load(model_name)
+    model.set_env(env)
+    print("model loaded and continuing training")
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4,
+                callback=checkpoint_callback)
+    model.save(model_name)
+    print("model saved")
+    
+else:
+
+    model = PPO("MultiInputPolicy", 
+                env,
+                learning_rate=0.001,
+                gamma=0.9,
+                # clip_range=0.2,
+                n_epochs=10,
+                ent_coef=0.001,
+                seed=42, 
+                verbose=1, tensorboard_log='tensorboard_logs/', 
+                device='cuda')
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4, 
+                callback=checkpoint_callback)
+    model.save(model_name)
+    print("model saved")
+
+# #use DDPG
+# model = DDPG("MultiInputPolicy",
+#              env,
+#              learning_rate=0.001,
+#              verbose=1,
+#              tensorboard_log='tensorboard_logs/',
+#              device='cuda')
+# model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4)
+# model.save("simple_high_level")
+# print("model saved")
+
+N = 300
 
 ego_data = DataHandler()
 pursuer_datas = []
@@ -168,7 +232,6 @@ for i in range(N):
     if done == True:
         print("done")
         break
-    env.reset()
         
 #%% 
 #get time
@@ -196,5 +259,4 @@ ax.legend()
 
 fig = plt.figure()
 plt.plot(reward_history)
-
 plt.show()

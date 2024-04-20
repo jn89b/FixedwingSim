@@ -196,8 +196,8 @@ class OpenGymInterface(CLSimInterface):
         self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
                         
         sim_hz = self.flight_dynamics_sim_hz
-        control_hz = 10
-        self.run_backend()            
+        control_hz = 5
+        # self.run_backend()            
         for i in range(sim_hz):
             if i % control_hz == 0 and i != 0:
                 return

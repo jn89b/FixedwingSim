@@ -82,11 +82,11 @@
                 <y>0.0</y>
                 <z>0.0</z>
             </location>
-            <orient unit="DEG">
+            <!-- <orient unit="DEG">
                 <roll>0.0</roll>
                 <pitch>0.0</pitch>
                 <yaw>0.0</yaw>
-            </orient>
+            </orient> -->
             <feed> 0.0 </feed>
 
             <thruster file="direct">
