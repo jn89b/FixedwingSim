@@ -69,7 +69,7 @@ control_constraints = {
     'u_theta_max': np.deg2rad(10),
     'u_psi_min':  -np.deg2rad(45),
     'u_psi_max':   np.deg2rad(45),
-    'v_cmd_min':   15,
+    'v_cmd_min':   20,
     'v_cmd_max':   30
 }
 
@@ -86,7 +86,7 @@ state_constraints = {
     'theta_max': np.deg2rad(15),
     'psi_min':  -np.pi,
     'psi_max':   np.pi,
-    'airspeed_min': 13,
+    'airspeed_min': 20,
     'airspeed_max': 30
 }
 
@@ -145,15 +145,14 @@ z_ref = []
 
 goal_position = env.goal_position
 
-N = 200
+N = 500
 for i in range(N):
-    #get random action
     
     start_time = time.time()
     action = env.action_space.sample()
     obs, reward, done, _, info = env.step(action)
     end_time = time.time()
-    print(f"Time taken for step {i}: {end_time - start_time}")
+    # print(f"Time taken for step {i}: {end_time - start_time}")
     # print(f"obs: {obs}, reward: {reward}, done: {done}, info: {info}")
     x = obs['ego'][0]
     y = obs['ego'][1]
@@ -218,7 +217,3 @@ ax[2].set_title('Yaw')
 
 print("Final time of simulation: ", env.backend_interface.sim.get_time())
 plt.show()
-
-
-
-    

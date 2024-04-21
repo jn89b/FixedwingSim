@@ -85,7 +85,6 @@ class PursuerEnv(gymnasium.Env):
         self.init_counter = 0
         self.pursuers = self.init_pursuers(num_pursuers)
         
-
     def compute_distance(self, p1:np.ndarray, p2:np.ndarray) -> float:
         return np.linalg.norm(p1-p2)
         
@@ -307,7 +306,7 @@ class PursuerEnv(gymnasium.Env):
         
         #check time limit
         if self.time_limit <= 0:
-            reward = 1000
+            reward = 10
             print("Time limit reached you survived!")
             return reward, True
 
@@ -325,21 +324,12 @@ class PursuerEnv(gymnasium.Env):
         for pursuer in self.pursuers:
             pursuer_obs = pursuer.get_observation()
             pursuer_pos = pursuer_obs[:3]
-            #pursuer_pos = np.array([pursuer_obs['x'], pursuer_obs['y'], pursuer_obs['z']])
             distance = self.compute_distance(ego_pos, pursuer_pos)
             
-            #update observation space with pursuer distance   
-            
             if distance < self.distance_tolerance:
-                reward = -1000
-                print("Pursuer caught the ego", distance)
-                return reward, True
+                reward += -1
             else:
-                #reward for being far from pursuer
-                #clip the distance reward
-                distance_reward = distance
-                distance_reward = np.clip(distance_reward, 0, 10)
-                reward += distance_reward
+                reward += 1
                 
         return reward, False
         
@@ -373,21 +363,15 @@ class PursuerEnv(gymnasium.Env):
             delta_psi = 2 * np.pi - delta_psi
         elif delta_psi < -np.pi:
             delta_psi = 2 * np.pi + delta_psi
-        
+
         self.action_history.append((proj_x, proj_y, proj_z))
- 
         position_action = np.array([proj_x, proj_y, proj_z])
         #self.backend_interface.set_commands(position_action)
         self.backend_interface.set_commands_w_pursuers(position_action, 
                                                        self.pursuers)
-        # for pursuer in self.pursuers:
-        #     pursuer_height = pursuer.get_observation()[2]
-        #     turn_cmd, v_cmd = pursuer.pursuit_nav(observation['ego'])
-        #     dz = observation['ego'][2] - pursuer_height
-        #     pursuer.set_command(np.deg2rad(turn_cmd), v_cmd, pursuer_height+dz)
-        
+
         step_reward,done = self.get_reward()
-        reward   += step_reward #+ time_penalty 
+        reward   += step_reward #+ time_penalty
         if self.init_counter % 300 == 0:
             print("Step", self.init_counter, self.time_limit)
             print("x, y, z", 
@@ -400,18 +384,18 @@ class PursuerEnv(gymnasium.Env):
     
     def reset(self, seed=None) -> Any:
         
-        if seed is not None or self.use_random_start:
-            print("Random start")
-            min_vel = self.state_constraints['airspeed_min']
-            max_vel = self.state_constraints['airspeed_max']
+        #if seed is not None or self.use_random_start:
+        if self.use_random_start:
+            min_vel = self.state_constraints['airspeed_min'] + 3
+            max_vel = self.state_constraints['airspeed_max'] - 3
             
             min_heading = -np.pi
             max_heading = np.pi
             
             random_vel = np.random.uniform(min_vel, max_vel)
             
-            random_heading = np.random.uniform(min_heading, 
-                                                max_heading)
+            random_heading = np.random.uniform(min_heading+3, 
+                                                max_heading-3)
 
             #wrap heading to [-pi, pi]
             if random_heading >= np.pi:
@@ -464,6 +448,7 @@ class PursuerEnv(gymnasium.Env):
         
         observation = self.__get_observation()
         info = self.__get_info()
+
         self.time_limit = self.time_step_constant
 
         return observation, info

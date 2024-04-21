@@ -124,6 +124,7 @@ aircraft = x8
 
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  aircraft=aircraft,
+                                 flight_dynamics_sim_hz=200,
                                  use_mpc=True,
                                  mpc_controller=mpc_control)
 
@@ -132,7 +133,7 @@ gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
 
 #### This is the environment that will be used for training
 env = gym.make('PursuerEnv', 
-               use_random_start = True,
+               use_random_start = False,
                backend_interface=gym_adapter,
                rl_control_constraints=rl_control_constraints,
                mpc_control_constraints=control_constraints,
@@ -143,7 +144,7 @@ env._max_episode_steps = 1000
 obs, info = env.reset()
 print("enviroment created")
 
-N = 1000
+N = 300
 
 ego_data = DataHandler()
 pursuer_datas = []
@@ -168,7 +169,7 @@ for i in range(N):
     if done == True:
         print("done")
         break
-    env.reset()
+    # env.reset()
         
 #%% 
 #get time
@@ -179,6 +180,7 @@ for i, pursuer in enumerate(env.pursuers):
     print("pursuer {i} sim frequency is: ", pursuer.flight_dynamics_sim_hz)
 #plot pursuers and evader
 import matplotlib.pyplot as plt
+plt.rcParams.update(plt.rcParamsDefault)
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')

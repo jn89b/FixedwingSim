@@ -37,7 +37,7 @@ class CLSimInterface():
                                   debug_level=debug_level,
                                   sim_frequency_hz=flight_dynamics_sim_hz)
         self.sim.start_engines()
-        self.sim.set_throttle_mixture_controls(0.5, 0)
+        self.sim.set_throttle_mixture_controls(0.3, 0)
         
         self.autopilot = autopilot
         if self.autopilot is None:
@@ -101,7 +101,7 @@ class OpenGymInterface(CLSimInterface):
             pitch_cmd = action[1]
             yaw_cmd = action[2]
             throttle_cmd = action[3] #this is 
-            print("yaw cmd deg", np.rad2deg(yaw_cmd))
+            # print("yaw cmd deg", np.rad2deg(yaw_cmd))
             # self.autopilot.roll_hold(roll_cmd)
             # self.autopilot.pitch_hold(pitch_cmd)
             self.autopilot.altitude_hold(meters_to_feet(50))
@@ -126,7 +126,8 @@ class OpenGymInterface(CLSimInterface):
                 init_states[5],
                 init_states[6]
             ]
-            
+            # print("init_states", init_states[2])
+            # print("pitch", np.rad2deg(init_states[4]))
             solution_results, end_time = self.mpc_controller.get_solution(
                 init_states, final_states, init_control)
 
@@ -137,22 +138,14 @@ class OpenGymInterface(CLSimInterface):
             pitch_cmd = solution_results['theta'][idx_step]
             heading_cmd = solution_results['psi'][idx_step]
             airspeed_cmd = solution_results['v_cmd'][idx_step]
-
-            # self.autopilot.pitch_hold(pitch_cmd)
-            #self.autopilot.roll_hold(roll_cmd)
-            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
-            self.autopilot.altitude_hold(meters_to_feet(z_cmd))
+            
+            self.autopilot.altitude_hold(meters_to_feet(60))
             self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
-                            
-            #dt_controller = self.mpc_controller.mpc_params['dt']
-            #hz = int(1/dt_controller)
             sim_hz = self.flight_dynamics_sim_hz
-            control_hz = 10
-            #relative_update = sim_hz // control_hz
-            self.run_backend()            
+            control_hz = 5
+            
             for i in range(sim_hz):
                 if i % control_hz == 0 and i != 0:
-                    # print("retuning")
                     return
                 else:
                     self.run_backend()
@@ -170,7 +163,6 @@ class OpenGymInterface(CLSimInterface):
         ]
         #feed it to the mpc controller 
         init_states = self.get_observation()
-        # print("init_states", init_states)
         init_control = [
             init_states[3],
             init_states[4],
@@ -188,16 +180,14 @@ class OpenGymInterface(CLSimInterface):
         pitch_cmd = solution_results['theta'][idx_step]
         heading_cmd = solution_results['psi'][idx_step]
         airspeed_cmd = solution_results['v_cmd'][idx_step]
-
-        # self.autopilot.pitch_hold(pitch_cmd)
-        #self.autopilot.roll_hold(roll_cmd)
-        self.autopilot.heading_hold(np.rad2deg(heading_cmd))
-        self.autopilot.altitude_hold(meters_to_feet(z_cmd))
-        self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
-                        
+                
+        self.autopilot.pitch_hold(pitch_cmd)
+        self.autopilot.roll_hold(roll_cmd)
+        self.autopilot.altitude_hold(meters_to_feet(heading_cmd))
         sim_hz = self.flight_dynamics_sim_hz
-        control_hz = 5
-        # self.run_backend()            
+        control_hz = 10
+
+        current_time = self.sim.get_time()            
         for i in range(sim_hz):
             if i % control_hz == 0 and i != 0:
                 return
@@ -211,12 +201,12 @@ class OpenGymInterface(CLSimInterface):
                     pursuer.set_command(turn_cmd, 
                                         v_cmd, 
                                         pursuer_height+dz)
+                
                     
     def reset_backend(self, init_conditions:dict=None) -> None:
         if init_conditions is not None:
             self.init_conditions = init_conditions
-            self.sim = FlightDynamics(aircraft=self.aircraft, 
-                                      init_conditions=init_conditions)
+            self.sim.reinitialise(init_conditions)
         else:
             self.sim.reinitialise(self.init_conditions)
 
@@ -413,8 +403,9 @@ class PursuerInterface(CLSimInterface):
     def reset_backend(self, init_conditions:dict=None) -> None:
         if init_conditions is not None:
             self.init_conditions = init_conditions
-            self.sim = FlightDynamics(aircraft=self.aircraft, 
-                                      init_conditions=init_conditions)
+            self.sim.reinitialise(init_conditions)
+            # self.sim = FlightDynamics(aircraft=self.aircraft, 
+            #                           init_conditions=init_conditions)
         else:
             self.sim.reinitialise(self.init_conditions)
 

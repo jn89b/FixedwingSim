@@ -20,7 +20,6 @@ from stable_baselines3.common.env_checker import check_env
 Test the MPC imports
 """
 
-
 class DataHandler():
     def __init__(self) -> None:
         self.x = []
@@ -47,7 +46,7 @@ def init_mpc_controller(mpc_control_constraints:dict,
     return plane_mpc
 
 
-LOAD_MODEL = True
+LOAD_MODEL = False
 TOTAL_TIMESTEPS = 1000000#100000/2 #
 CONTINUE_TRAINING = False
 
@@ -70,7 +69,7 @@ init_state_dict = {
 }
 
 mpc_params = {
-    'N': 10,
+    'N': 15,
     'Q': ca.diag([1.0, 1.0, 1.0, 0, 0, 0.0, 0.0]),
     'R': ca.diag([0.1, 0.1, 0.1, 0.1]),
     'dt': 0.1
@@ -109,7 +108,7 @@ state_constraints = {
     'theta_max': np.deg2rad(15),
     'psi_min':  -np.pi,
     'psi_max':   np.pi,
-    'airspeed_min': 15,
+    'airspeed_min': 20,
     'airspeed_max': 30
 }
 
@@ -163,14 +162,13 @@ distance_history = []
 
 # Save a checkpoint every 1000 steps
 model_name ="pursuer_avoidance"
-checkpoint_callback = CheckpointCallback(save_freq=10000, save_path='./models/'+model_name+'_1/',
+checkpoint_callback = CheckpointCallback(save_freq=10000, save_path='./models/'+model_name+'_2/',
                                         name_prefix=model_name)
 
 if LOAD_MODEL and not CONTINUE_TRAINING:
     model = PPO.load(model_name)
     print("model loaded")
 elif LOAD_MODEL and CONTINUE_TRAINING:
-    
     model = PPO.load(model_name)
     model.set_env(env)
     print("model loaded and continuing training")
@@ -180,7 +178,8 @@ elif LOAD_MODEL and CONTINUE_TRAINING:
     print("model saved")
     
 else:
-
+    #check env 
+    # check_env(env)
     model = PPO("MultiInputPolicy", 
                 env,
                 learning_rate=0.001,
