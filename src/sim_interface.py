@@ -1,6 +1,8 @@
 from abc import ABC
 import numpy as np
 import time 
+#garbage collection
+import gc
 from jsbsim_backend.simulator import FlightDynamics
 from jsbsim_backend.aircraft import Aircraft, x8
 from debug_utils import *
@@ -30,6 +32,7 @@ class CLSimInterface():
         self.init_conditions = init_conditions
         self.aircraft = aircraft
         self.flight_dynamics_sim_hz = flight_dynamics_sim_hz
+        self.debug_level = debug_level
                 
         #this will initialize the simulator with the aircraft and initial conditions
         self.sim = FlightDynamics(aircraft=aircraft, 
@@ -56,15 +59,43 @@ class CLSimInterface():
             self.graph.get_angle_data()
             self.graph.get_airspeed()
     
-    def reset_backend(self) -> None:
-        """
-        Require a method to reset the simulator
-        """
-        raise NotImplementedError("Method reset_sim not implemented")
+    # def reset_backend(self) -> None:
+    #     """
+    #     Require a method to reset the simulator
+    #     """
+    #     raise NotImplementedError("Method reset_sim not implemented")
     
     def get_states(self) -> dict:
         return self.sim.get_states()
-    
+
+    def reset_backend(self, init_conditions:dict=None) -> None:
+        """
+        Reset the simulator to the initial conditions provided
+        """
+        if init_conditions is not None:
+            # self.init_conditions = init_conditions
+            # self.sim.reinitialise(init_conditions)
+            if self.sim:
+                
+                dt = self.sim.sim_dt
+                aircraft = self.sim.aircraft
+                debug_level = self.debug_level
+                flight_dynamics_sim_hz = self.sim.sim_frequency_hz
+                self.init_conditions = init_conditions
+                
+                self.sim.close()
+                self.sim = None
+                self.sim = FlightDynamics(aircraft=aircraft, 
+                                    init_conditions=init_conditions, 
+                                    debug_level=debug_level,
+                                    sim_frequency_hz=flight_dynamics_sim_hz)
+                self.autopilot = X8Autopilot(self.sim)
+                self.graph = DebugGraphs(self.sim)
+                # self.sim.reinitialise(init_conditions)
+                # self.sim.initialise(dt, aircraft.jsbsim_id, init_conditions)
+        else:
+            self.sim.reinitialise(self.init_conditions)    
+
 class OpenGymInterface(CLSimInterface):
     def __init__(self, 
                  init_conditions: dict,
@@ -209,14 +240,6 @@ class OpenGymInterface(CLSimInterface):
                                         v_cmd, 
                                         pursuer_height+dz)
                 
-                    
-    def reset_backend(self, init_conditions:dict=None) -> None:
-        if init_conditions is not None:
-            self.init_conditions = init_conditions
-            self.sim.reinitialise(init_conditions)
-        else:
-            self.sim.reinitialise(self.init_conditions)
-
     def get_info(self) -> dict:
         return self.sim.get_states()
 

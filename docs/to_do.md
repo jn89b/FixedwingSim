@@ -26,3 +26,6 @@
         - Log the data of the trajectories 
     -[] Simulate Ardupilot X8 skywalker and 
     
+
+# Notes for refactorign
+- need to reinitialize the sim for everything f

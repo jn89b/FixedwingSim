@@ -108,7 +108,7 @@ state_constraints = {
     'theta_max': np.deg2rad(15),
     'psi_min':  -np.pi,
     'psi_max':   np.pi,
-    'airspeed_min': 20,
+    'airspeed_min': 15,
     'airspeed_max': 30
 }
 

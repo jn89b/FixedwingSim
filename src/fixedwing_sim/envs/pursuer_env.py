@@ -400,6 +400,7 @@ class PursuerEnv(gymnasium.Env):
             
             random_heading = np.random.uniform(min_heading+3, 
                                                 max_heading-3)
+            
 
             #wrap heading to [-pi, pi]
             if random_heading >= np.pi:
@@ -417,9 +418,14 @@ class PursuerEnv(gymnasium.Env):
                 self.state_constraints['theta_min'],
                 self.state_constraints['theta_max'])
             
-            random_lat_dg = 0.0
-            random_lon_dg = 0.0
-            random_alt_ft = meters_to_feet(np.random.uniform(40, 80))
+            random_x = np.random.uniform(-100, 100)
+            random_y = np.random.uniform(-100, 100)
+            random_z = np.random.uniform(40, 60)
+            random_position = np.array([random_x, random_y, random_z])
+            geo_location = local_to_global_position(random_position)
+            random_lat_dg = geo_location[1]
+            random_lon_dg = geo_location[0]
+            # random_alt_ft = geo_location[2]
             init_state_dict = {
                 "ic/u-fps": mps_to_ktas(random_vel),
                 "ic/v-fps": 0.0,
@@ -427,7 +433,7 @@ class PursuerEnv(gymnasium.Env):
                 "ic/p-rad_sec": 0.0,
                 "ic/q-rad_sec": 0.0,
                 "ic/r-rad_sec": 0.0,
-                "ic/h-sl-ft": random_alt_ft,
+                "ic/h-sl-ft": meters_to_feet(random_z),
                 "ic/long-gc-deg": random_lon_dg,
                 "ic/lat-gc-deg": random_lat_dg,
                 "ic/psi-true-deg": random_heading,
@@ -441,7 +447,7 @@ class PursuerEnv(gymnasium.Env):
             self.backend_interface.init_conditions = init_state_dict
             self.backend_interface.reset_backend(
                 init_conditions=init_state_dict)
-            
+            self.backend_interface = self.backend_interface
             self.pursuers = self.init_pursuers(self.num_pursuers)
                         
         else:    
@@ -451,6 +457,7 @@ class PursuerEnv(gymnasium.Env):
                 pursuer.reset_backend()
         
         observation = self.__get_observation()
+
         info = self.__get_info()
 
         self.time_limit = self.time_step_constant
