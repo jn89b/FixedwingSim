@@ -328,6 +328,10 @@ class PursuerEnv(gymnasium.Env):
             
             if distance < self.distance_tolerance:
                 reward += -1
+            elif distance < self.distance_tolerance/2:
+                reward += -1000
+                print("Pursuer caught you")
+                return reward, True
             else:
                 reward += 1
                 

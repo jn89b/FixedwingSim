@@ -139,8 +139,12 @@ class OpenGymInterface(CLSimInterface):
             heading_cmd = solution_results['psi'][idx_step]
             airspeed_cmd = solution_results['v_cmd'][idx_step]
             
-            self.autopilot.altitude_hold(meters_to_feet(60))
+            # self.autopilot.altitude_hold(meters_to_feet(60))
+            # self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
+            self.autopilot.heading_hold(np.rad2deg(heading_cmd)) 
+            self.autopilot.altitude_hold(meters_to_feet(z_cmd))
             self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
+
             sim_hz = self.flight_dynamics_sim_hz
             control_hz = 5
             
@@ -181,9 +185,12 @@ class OpenGymInterface(CLSimInterface):
         heading_cmd = solution_results['psi'][idx_step]
         airspeed_cmd = solution_results['v_cmd'][idx_step]
                 
-        self.autopilot.pitch_hold(pitch_cmd)
-        self.autopilot.roll_hold(roll_cmd)
-        self.autopilot.altitude_hold(meters_to_feet(heading_cmd))
+        # self.autopilot.pitch_hold(pitch_cmd)
+        #self.autopilot.roll_hold(roll_cmd)
+        self.autopilot.heading_hold(np.rad2deg(heading_cmd)) 
+        self.autopilot.altitude_hold(meters_to_feet(z_cmd))
+        self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
+
         sim_hz = self.flight_dynamics_sim_hz
         control_hz = 10
 
