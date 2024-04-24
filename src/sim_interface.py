@@ -76,13 +76,10 @@ class CLSimInterface():
             # self.init_conditions = init_conditions
             # self.sim.reinitialise(init_conditions)
             if self.sim:
-                
-                dt = self.sim.sim_dt
                 aircraft = self.sim.aircraft
                 debug_level = self.debug_level
                 flight_dynamics_sim_hz = self.sim.sim_frequency_hz
                 self.init_conditions = init_conditions
-                
                 self.sim.close()
                 self.sim = None
                 self.sim = FlightDynamics(aircraft=aircraft, 
@@ -125,13 +122,12 @@ class OpenGymInterface(CLSimInterface):
         for the aircraft using the autopilot, simulating 
         our flight controller        
         """
-        # self.autopilot.set_commands(action)
         if not self.use_mpc:
             print("Using Autopilot")
             roll_cmd = action[0]
             pitch_cmd = action[1]
             yaw_cmd = action[2]
-            throttle_cmd = action[3] #this is 
+            throttle_cmd = action[3] #this is actually airspeed command
             # print("yaw cmd deg", np.rad2deg(yaw_cmd))
             # self.autopilot.roll_hold(roll_cmd)
             # self.autopilot.pitch_hold(pitch_cmd)
@@ -146,7 +142,7 @@ class OpenGymInterface(CLSimInterface):
                 0,
                 0,
                 0,
-                20
+                action[3]
             ]
             #feed it to the mpc controller 
             init_states = self.get_observation()
@@ -178,9 +174,17 @@ class OpenGymInterface(CLSimInterface):
 
             sim_hz = self.flight_dynamics_sim_hz
             control_hz = 5
-            
+            goal_location = np.array([action[0], action[1], action[2]])
+            current_location = np.array([init_states[0], init_states[1], init_states[2]])
+            distance_tolerance = 5
             for i in range(sim_hz):
-                if i % control_hz == 0 and i != 0:
+                init_states = self.get_observation()
+                current_location = np.array([init_states[0], init_states[1], init_states[2]])
+                distance = np.linalg.norm(goal_location - current_location)
+                print("distance", distance)
+                if distance <= distance_tolerance:
+                    return 
+                elif i % control_hz == 0 and i != 0:
                     return
                 else:
                     self.run_backend()
@@ -219,15 +223,22 @@ class OpenGymInterface(CLSimInterface):
         # self.autopilot.pitch_hold(pitch_cmd)
         #self.autopilot.roll_hold(roll_cmd)
         self.autopilot.heading_hold(np.rad2deg(heading_cmd)) 
-        self.autopilot.altitude_hold(meters_to_feet(z_cmd))
+        self.autopilot.altitude_hold(meters_to_feet(50))
         self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
 
         sim_hz = self.flight_dynamics_sim_hz
         control_hz = 10
-
-        current_time = self.sim.get_time()            
+        goal_location = np.array([action[0], action[1], action[2]])
+        current_location = np.array([init_states[0], init_states[1], init_states[2]])
+        distance_tolerance = 5
         for i in range(sim_hz):
-            if i % control_hz == 0 and i != 0:
+            init_states = self.get_observation()
+            current_location = np.array([init_states[0], init_states[1], init_states[2]])
+            distance = np.linalg.norm(goal_location - current_location)
+            print("distance", distance)
+            if distance <= distance_tolerance:
+                return 
+            elif i % control_hz == 0 and i != 0:
                 return
             else:
                 self.run_backend()
@@ -239,7 +250,7 @@ class OpenGymInterface(CLSimInterface):
                     pursuer.set_command(turn_cmd, 
                                         v_cmd, 
                                         pursuer_height+dz)
-                
+
     def get_info(self) -> dict:
         return self.sim.get_states()
 

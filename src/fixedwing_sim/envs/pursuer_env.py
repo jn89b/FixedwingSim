@@ -79,7 +79,7 @@ class PursuerEnv(gymnasium.Env):
         
         self.use_random_start = use_random_start        
         self.distance_tolerance = 15
-        self.time_step_constant = 300 #number of steps
+        self.time_step_constant = 100 #number of steps
         #need to figure out the relationship between time and steps 
         self.time_limit = self.time_step_constant 
         self.init_counter = 0
@@ -95,11 +95,9 @@ class PursuerEnv(gymnasium.Env):
         pursuers  = []
         init_count = 0
         ego_obs = self.backend_interface.get_observation()
-        #ego_pos = np.array([ego_obs['x'], ego_obs['y'], ego_obs['z']])
         ego_pos = ego_obs[:3]
 
         while init_count < num_pursuers:
-            
             rand_x = np.random.uniform(ego_pos[0]-self.start_distance_from_ego, 
                                        ego_pos[0]+self.start_distance_from_ego)
             rand_y = np.random.uniform(ego_pos[1]-self.start_distance_from_ego,
@@ -107,6 +105,8 @@ class PursuerEnv(gymnasium.Env):
 
             rand_z = np.random.uniform(ego_pos[2]-self.start_distance_from_ego/2,
                                         ego_pos[2]+self.start_distance_from_ego/2)
+            
+            rand_z = 50
             
             pursuer_vel = np.random.uniform(15, 40)
             random_heading = np.random.uniform(-np.pi, np.pi)
@@ -147,7 +147,7 @@ class PursuerEnv(gymnasium.Env):
                 init_conditions=pursuer_init_conditions,
                 evader_position=[0, 0, 0],
                 control_constraints=control_constraints,
-                min_max_vels=[15,40],
+                min_max_vels=[15,30],
                 id_number=init_count,
                 flight_dynamics_sim_hz=self.backend_interface.flight_dynamics_sim_hz,
             )
@@ -155,13 +155,13 @@ class PursuerEnv(gymnasium.Env):
             pursuer_obs = pursuer.get_observation()
             pursuer_pos = pursuer_obs[:3]                
             distance = self.compute_distance(ego_pos, pursuer_pos)
-            if distance > self.start_distance_from_ego:   
+            if (distance > self.start_distance_from_ego) and \
+                (distance > self.distance_tolerance):   
                 pursuers.append(pursuer)
                 init_count += 1
-                # print("Pursuer {} initialized".format(init_count))
             else:
                 continue
-        
+
         #send initial commands to pursuers
         evader_observation = self.backend_interface.get_observation()
         for pursuer in pursuers:
@@ -260,6 +260,7 @@ class PursuerEnv(gymnasium.Env):
         x_norm = action[0]
         y_norm = action[1]
         z_norm = action[2]
+        v_norm = action[3]
         
         x_cmd = self.norm_map_to_real(self.rl_control_constraints['x_max'],
                                             self.rl_control_constraints['x_min'],
@@ -273,7 +274,11 @@ class PursuerEnv(gymnasium.Env):
                                             self.rl_control_constraints['z_min'],
                                             z_norm)
         
-        return np.array([x_cmd, y_cmd, z_cmd])
+        v_cmd = self.norm_map_to_real(self.rl_control_constraints['v_cmd_min'],
+                                      self.rl_control_constraints['v_cmd_max'],
+                                      v_norm)
+        
+        return np.array([x_cmd, y_cmd, z_cmd, v_cmd])
         
     def __get_observation(self) -> dict:
         ego_obs = self.backend_interface.get_observation()
@@ -283,8 +288,8 @@ class PursuerEnv(gymnasium.Env):
             distance = self.compute_distance(ego_obs[:3], pursuer_pos)
             ego_obs = np.append(ego_obs, distance)
         
-        obs = {"ego": ego_obs}
-    
+        obs = {"ego": ego_obs}    
+        
         return obs
     
     def __get_info(self) -> dict:
@@ -306,36 +311,38 @@ class PursuerEnv(gymnasium.Env):
         
         #check time limit
         if self.time_limit <= 0:
-            reward = 10
+            reward += 100
             print("Time limit reached you survived!")
             return reward, True
 
         if ego_pos[2] < self.state_constraints['z_min']:
-            reward = -1000
+            reward += -100
             print("Crashed into the ground")
             return reward, True
         
         if ego_pos[2] > self.state_constraints['z_max']:
-            reward = -1000
+            reward += -100
             print("Flew too high sky")
             return reward, True
 
+        caught = False
         #this is redundant but I will keep it for now
         for pursuer in self.pursuers:
+            
             pursuer_obs = pursuer.get_observation()
             pursuer_pos = pursuer_obs[:3]
             distance = self.compute_distance(ego_pos, pursuer_pos)
-            
             if distance < self.distance_tolerance:
-                reward += -1
-            elif distance < self.distance_tolerance/2:
-                reward += -1000
+                reward += -100
                 print("Pursuer caught you")
-                return reward, True
+                caught = True
             else:
                 reward += 1
                 
-        return reward, False
+        if caught:
+            return reward, True
+        else:
+            return reward, False
         
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
         """
@@ -451,13 +458,11 @@ class PursuerEnv(gymnasium.Env):
             self.pursuers = self.init_pursuers(self.num_pursuers)
                         
         else:    
-            self.backend_interface.reset_backend()
-        
+            self.backend_interface.reset_backend()       
             for pursuer in self.pursuers:
                 pursuer.reset_backend()
         
         observation = self.__get_observation()
-
         info = self.__get_info()
 
         self.time_limit = self.time_step_constant

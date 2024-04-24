@@ -11,6 +11,8 @@ from jsbsim_backend.aircraft import Aircraft, x8
 from jsbsim_backend.simulator import FlightDynamics
 from conversions import feet_to_meters, meters_to_feet, knots_to_mps, mps_to_knots
 from sim_interface import CLSimInterface, OpenGymInterface
+from conversions import local_to_global_position
+
 
 from guidance_control.autopilot import X8Autopilot
 from opt_control.PlaneOptControl import PlaneOptControl
@@ -369,9 +371,13 @@ class MPCEnv(gymnasium.Env):
             #move lat and lon to random position within a small radius
             # random_lat_dg = np.random.uniform(-0.0001, 0.0001)
             # random_lon_dg = np.random.uniform(-0.0001, 0.0001)
-            random_lat_dg = 0.0
-            random_lon_dg = 0.0
-            random_alt_ft = meters_to_feet(np.random.uniform(40, 80))
+            random_x = np.random.uniform(-100, 100)
+            random_y = np.random.uniform(-100, 100)
+            random_z = np.random.uniform(40, 60)
+            random_position = np.array([random_x, random_y, random_z])
+            geo_location = local_to_global_position(random_position)
+            random_lat_dg = geo_location[1]
+            random_lon_dg = geo_location[0]
             
             init_state_dict = {
                 "ic/u-fps": meters_to_feet(random_vel),
@@ -380,7 +386,7 @@ class MPCEnv(gymnasium.Env):
                 "ic/p-rad_sec": 0.0,
                 "ic/q-rad_sec": 0.0,
                 "ic/r-rad_sec": 0.0,
-                "ic/h-sl-ft": random_alt_ft,
+                "ic/h-sl-ft": meters_to_feet(random_z),
                 "ic/long-gc-deg": random_lon_dg,
                 "ic/lat-gc-deg": random_lat_dg,
                 "ic/psi-true-deg": random_heading,
@@ -399,6 +405,7 @@ class MPCEnv(gymnasium.Env):
             self.backend_interface.init_conditions = init_state_dict
             self.backend_interface.reset_backend(
                 init_conditions=init_state_dict)
+            self.backend_interface = self.backend_interface
             # print("Randomized initial conditions", init_state_dict)
                         
         else:    

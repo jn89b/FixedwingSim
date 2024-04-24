@@ -70,18 +70,20 @@ init_state_dict = {
 
 mpc_params = {
     'N': 15,
-    'Q': ca.diag([1.0, 1.0, 1.0, 0, 0, 0.0, 0.0]),
+    'Q': ca.diag([1.0, 1.0, 1.0, 0, 0, 0.0, 1.0]),
     'R': ca.diag([0.1, 0.1, 0.1, 0.1]),
     'dt': 0.1
 }
 
 rl_control_constraints = {
-    'x_min': -1,
-    'x_max': 1,
-    'y_min': -1,
-    'y_max': 1,
-    'z_min': -1,
-    'z_max': 1,
+    'x_min': -30,
+    'x_max': 30,
+    'y_min': -30,
+    'y_max': 30,
+    'z_min': -30,
+    'z_max': 30,
+    'v_cmd_min': 15,
+    'v_cmd_max': 30,
 }
 
 control_constraints = {
@@ -96,10 +98,10 @@ control_constraints = {
 }
 
 state_constraints = {
-    'x_min': -np.inf,
-    'x_max': np.inf,
-    'y_min': -np.inf,
-    'y_max': np.inf,
+    'x_min': -500, #-np.inf,
+    'x_max': 500, #np.inf,
+    'y_min': -500, #-np.inf,
+    'y_max': 500, #np.inf,
     'z_min': 30,
     'z_max': 100,
     'phi_min':  -np.deg2rad(45),
@@ -129,11 +131,11 @@ gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  mpc_controller=mpc_control)
 
 #show all registered environments
-# print(gym.envs.registry.keys())
 
 #### This is the environment that will be used for training
 env = gym.make('PursuerEnv', 
                use_random_start = True,
+               num_pursuers = 3,
                backend_interface=gym_adapter,
                rl_control_constraints=rl_control_constraints,
                mpc_control_constraints=control_constraints,
@@ -162,7 +164,8 @@ distance_history = []
 
 # Save a checkpoint every 1000 steps
 model_name ="pursuer_avoidance"
-checkpoint_callback = CheckpointCallback(save_freq=10000, save_path='./models/'+model_name+'_2/',
+checkpoint_callback = CheckpointCallback(save_freq=10000, 
+                                        save_path='./models/'+model_name+'_2/',
                                         name_prefix=model_name)
 
 if LOAD_MODEL and not CONTINUE_TRAINING:
@@ -176,17 +179,16 @@ elif LOAD_MODEL and CONTINUE_TRAINING:
                 callback=checkpoint_callback)
     model.save(model_name)
     print("model saved")
-    
 else:
     #check env 
     # check_env(env)
     model = PPO("MultiInputPolicy", 
                 env,
-                learning_rate=0.001,
-                gamma=0.9,
+                learning_rate=0.0001,
+                gamma=0.99,
                 # clip_range=0.2,
                 n_epochs=10,
-                ent_coef=0.001,
+                # ent_coef=0.001,
                 seed=42, 
                 verbose=1, tensorboard_log='tensorboard_logs/', 
                 device='cuda')
