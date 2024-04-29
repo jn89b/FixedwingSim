@@ -122,6 +122,7 @@ class OpenGymInterface(CLSimInterface):
         for the aircraft using the autopilot, simulating 
         our flight controller        
         """
+        print("action", action)
         if not self.use_mpc:
             print("Using Autopilot")
             roll_cmd = action[0]
@@ -181,13 +182,29 @@ class OpenGymInterface(CLSimInterface):
                 init_states = self.get_observation()
                 current_location = np.array([init_states[0], init_states[1], init_states[2]])
                 distance = np.linalg.norm(goal_location - current_location)
-                print("distance", distance)
                 if distance <= distance_tolerance:
                     return 
                 elif i % control_hz == 0 and i != 0:
                     return
                 else:
                     self.run_backend()
+                    
+    def cartesian_to_navigation_radians(self, 
+            cartesian_angle_radians:float) -> float:
+        """
+        Converts a Cartesian angle in radians to a navigation 
+        system angle in radians.
+        North is 0 radians, East is π/2 radians, 
+        South is π radians, and West is 3π/2 radians.
+        
+        Parameters:
+        - cartesian_angle_radians: Angle in radians in the Cartesian coordinate system.
+        
+        Returns:
+        - A navigation system angle in radians.
+        """
+        new_yaw = math.pi/2 - cartesian_angle_radians
+        return new_yaw
                     
     def set_commands_w_pursuers(self, action:np.ndarray,
                                 pursuer_list: list) -> None:
@@ -198,44 +215,52 @@ class OpenGymInterface(CLSimInterface):
             0,
             0,
             0,
-            20
+            action[3]
         ]
         #feed it to the mpc controller 
         init_states = self.get_observation()
-        init_control = [
-            init_states[3],
-            init_states[4],
-            init_states[5],
-            init_states[6]
-        ]
+        # init_control = [
+        #     init_states[3],
+        #     init_states[4],
+        #     init_states[5],
+        #     init_states[6]
+        # ]
         
-        solution_results, end_time = self.mpc_controller.get_solution(
-            init_states, final_states, init_control)
+        # solution_results, end_time = self.mpc_controller.get_solution(
+        #     init_states, final_states, init_control)
 
-        #set the commands
-        idx_step = 1
-        z_cmd = solution_results['z'][idx_step]
-        roll_cmd = solution_results['phi'][idx_step]
-        pitch_cmd = solution_results['theta'][idx_step]
-        heading_cmd = solution_results['psi'][idx_step]
-        airspeed_cmd = solution_results['v_cmd'][idx_step]
+        # #set the commands
+        # idx_step = 1
+        # z_cmd = solution_results['z'][idx_step]
+        # roll_cmd = solution_results['phi'][idx_step]
+        # pitch_cmd = solution_results['theta'][idx_step]
+        # heading_cmd = solution_results['psi'][idx_step]
+        # airspeed_cmd = solution_results['v_cmd'][idx_step]
                 
         # self.autopilot.pitch_hold(pitch_cmd)
         #self.autopilot.roll_hold(roll_cmd)
-        self.autopilot.heading_hold(np.rad2deg(heading_cmd)) 
-        self.autopilot.altitude_hold(meters_to_feet(50))
-        self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
+        # self.autopilot.heading_hold(np.rad2deg(heading_cmd)) 
+        # self.autopilot.altitude_hold(meters_to_feet(50))
+        # self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
 
         sim_hz = self.flight_dynamics_sim_hz
         control_hz = 10
         goal_location = np.array([action[0], action[1], action[2]])
         current_location = np.array([init_states[0], init_states[1], init_states[2]])
         distance_tolerance = 5
+        
         for i in range(sim_hz):
             init_states = self.get_observation()
             current_location = np.array([init_states[0], init_states[1], init_states[2]])
             distance = np.linalg.norm(goal_location - current_location)
-            print("distance", distance)
+            dy = final_states[1] - init_states[1]
+            dx = final_states[0] - init_states[0]
+            arctan_cmd = np.arctan2(dy, dx)
+            heading_cmd = self.cartesian_to_navigation_radians(arctan_cmd)
+            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
+            self.autopilot.altitude_hold(meters_to_feet(action[2]))
+            self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(action[3]))
+            
             if distance <= distance_tolerance:
                 return 
             elif i % control_hz == 0 and i != 0:

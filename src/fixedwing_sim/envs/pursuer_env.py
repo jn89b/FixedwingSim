@@ -45,9 +45,9 @@ class PursuerEnv(gymnasium.Env):
                  mpc_control_constraints:dict=None,
                  state_constraints:dict=None,
                  num_pursuers:int=3,
-                 start_distance_from_ego:float=50,
+                 start_distance_from_ego:float=75,
                  distance_capture:float=10,
-                 pursuer_velocities:np.ndarray=np.ndarray([15, 40]),
+                 pursuer_velocities:np.ndarray=np.ndarray([15, 30]),
                  render_mode:str=None,
                  render_fps:int=7, 
                  use_random_start:bool=False) -> None:
@@ -79,10 +79,11 @@ class PursuerEnv(gymnasium.Env):
         
         self.use_random_start = use_random_start        
         self.distance_tolerance = 15
-        self.time_step_constant = 100 #number of steps
+        self.time_step_constant = 300 #number of steps
         #need to figure out the relationship between time and steps 
         self.time_limit = self.time_step_constant 
         self.init_counter = 0
+        self.distance_history = []
         self.pursuers = self.init_pursuers(num_pursuers)
         
     def compute_distance(self, p1:np.ndarray, p2:np.ndarray) -> float:
@@ -153,10 +154,11 @@ class PursuerEnv(gymnasium.Env):
             )
             
             pursuer_obs = pursuer.get_observation()
-            pursuer_pos = pursuer_obs[:3]                
+            pursuer_pos = pursuer_obs[:3]
             distance = self.compute_distance(ego_pos, pursuer_pos)
             if (distance > self.start_distance_from_ego) and \
                 (distance > self.distance_tolerance):   
+                self.distance_history.append(distance)
                 pursuers.append(pursuer)
                 init_count += 1
             else:
@@ -312,32 +314,37 @@ class PursuerEnv(gymnasium.Env):
         #check time limit
         if self.time_limit <= 0:
             reward += 100
-            print("Time limit reached you survived!")
+            # print("Time limit reached you survived!")
             return reward, True
 
         if ego_pos[2] < self.state_constraints['z_min']:
-            reward += -100
+            reward += -1E6
             print("Crashed into the ground")
             return reward, True
         
         if ego_pos[2] > self.state_constraints['z_max']:
-            reward += -100
+            reward += -1E6
             print("Flew too high sky")
             return reward, True
 
         caught = False
         #this is redundant but I will keep it for now
-        for pursuer in self.pursuers:
-            
+        for i, pursuer in enumerate(self.pursuers):
             pursuer_obs = pursuer.get_observation()
             pursuer_pos = pursuer_obs[:3]
+            old_distance = self.distance_history[i]    
             distance = self.compute_distance(ego_pos, pursuer_pos)
-            if distance < self.distance_tolerance:
-                reward += -100
-                print("Pursuer caught you")
+            
+            #we want to be as far away from the pursuers as possible
+            if distance < old_distance:
+                reward += distance - old_distance
+            elif distance <= self.distance_tolerance:
+                reward += distance
                 caught = True
             else:
-                reward += 1
+                reward += distance - old_distance
+                
+            self.distance_history[i] = distance
                 
         if caught:
             return reward, True
@@ -376,19 +383,19 @@ class PursuerEnv(gymnasium.Env):
             delta_psi = 2 * np.pi + delta_psi
 
         self.action_history.append((proj_x, proj_y, proj_z))
-        position_action = np.array([proj_x, proj_y, proj_z])
+        position_action = np.array([proj_x, proj_y, proj_z, real_action[3]])
         #self.backend_interface.set_commands(position_action)
         self.backend_interface.set_commands_w_pursuers(position_action, 
                                                        self.pursuers)
 
         step_reward,done = self.get_reward()
         reward   += step_reward #+ time_penalty
-        if self.init_counter % 300 == 0:
-            print("Step", self.init_counter, self.time_limit)
-            print("x, y, z", 
-                  observation['ego'][0], 
-                  observation['ego'][1], 
-                  observation['ego'][2])
+        # if self.init_counter % 300 == 0:
+        #     print("Step", self.init_counter, self.time_limit)
+        #     print("x, y, z", 
+        #           observation['ego'][0], 
+        #           observation['ego'][1], 
+        #           observation['ego'][2])
             
         #check if max episode steps reached
         return observation, reward, done, False, info

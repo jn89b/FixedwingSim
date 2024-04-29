@@ -222,7 +222,6 @@ class X8Autopilot:
         # error = heading_comm_dg - self.sim[prp.heading_deg]
         # print("heading command: ", heading_comm)
         error = heading_comm - np.rad2deg(self.sim[prp.heading_rad])
-        
         # if abs(error) > 2:
         #     self.roll_hold(np.deg2rad(0))
         #     return

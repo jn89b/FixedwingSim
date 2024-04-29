@@ -47,7 +47,7 @@ def init_mpc_controller(mpc_control_constraints:dict,
 
 
 LOAD_MODEL = False
-TOTAL_TIMESTEPS = 1000000#100000/2 #
+TOTAL_TIMESTEPS = 1250000#100000/2 #
 CONTINUE_TRAINING = False
 
 init_state_dict = {
@@ -164,8 +164,9 @@ distance_history = []
 
 # Save a checkpoint every 1000 steps
 model_name ="pursuer_avoidance"
+# model_name = "early_pursuer"
 checkpoint_callback = CheckpointCallback(save_freq=10000, 
-                                        save_path='./models/'+model_name+'_2/',
+                                        save_path='./models/'+model_name+'_3/',
                                         name_prefix=model_name)
 
 if LOAD_MODEL and not CONTINUE_TRAINING:
@@ -223,11 +224,10 @@ for i in range(N):
     # while not done:
     action = env.action_space.sample()
     obs, reward, done, _, info = env.step(action)
-    
     reward_history.append(reward)
-    
     env.render()
     ego_data.update_data(obs['ego'])
+    
     for p,k in zip(pursuer_datas,info.keys()):
         p.update_data(info[k])
     if done == True:
