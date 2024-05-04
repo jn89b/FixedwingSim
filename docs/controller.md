@@ -11,10 +11,27 @@
   - pitch up max setpoint 60 deg/s
   - pitch down max setpoint 60 deg/s
   - yaw rate max setpoint 50 deg/s
+- Rate Controller Gains
+  - Roll
+    - FeedForward = 0.5 rad/s
+    - D = 0 rad/s
+    - I = 0.1 rad/s
+    - P = 0.05 rad/s
+  - Pitch 
+    - P = 0.08 rad/s
+    - I = 0.1  rad
+    - D = 0.0  rad
+    - Feedforward = 0.5
+  - Yaw
+    - P = 0.05
+    - I = 0.1
+    - D = 0.0
+    - FF = 0.3
 
 ## How does the controller run
 - In PX4 check out the FixedWingAttitudeControl.cpp Run() method 
 - This mechanism computes the set attitudes and spits out/publishes the rates of the controller
+- This is the first part of the cascaded controller
 ```cpp
 /* Run attitude controllers */
 if (_vcontrol_mode.flag_control_attitude_enabled && _in_fw_or_transition_wo_tailsitter_transition) {
@@ -76,6 +93,9 @@ if (_vcontrol_mode.flag_control_attitude_enabled && _in_fw_or_transition_wo_tail
 ```
 
 - After that is done check out the FixedwingRateControl.hpp and the vehicle manual poll
+- Checkout rate_control
+- This is the second part of the cascaded controller
 ```cpp
 
 ``` 
+- http://outerra.shoutwiki.com/wiki/JSBSim_Properties

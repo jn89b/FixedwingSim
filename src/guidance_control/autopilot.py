@@ -343,11 +343,22 @@ class X8Autopilot:
                                 yaw_sp_rad:float,
                                 thrust_sp:float) -> None:
         
+        # this is the the end of the first part of the cascade controller
         roll_body_rate_sp_rad = self.control_roll(roll_sp_rad, yaw_sp_rad)
         pitch_body_rate_sp_rad = self.control_pitch(pitch_sp_rad, yaw_sp_rad)
         yaw_body_rate_sp_rad = self.control_yaw(roll_sp_rad, pitch_sp_rad)
         
-        #from these body rates send to the mixer for the actuators
+        #get the current rates of the controller
+        current_roll_rate = self.sim[prp.p_radps]
+        current_pitch_rate = self.sim[prp.q_radps]
+        current_yaw_rate = self.sim[prp.r_radps]
+        
+        #get the acceleration of the controller
+        current_roll_accel = self.sim[prp.pdot_radps2]
+        current_pitch_accel = self.sim[prp.qdot_radps2]
+        current_yaw_accel = self.sim[prp.rdot_radps2]
+        
+        
         
             
     def heading_hold(self, heading_comm:float) -> None:
