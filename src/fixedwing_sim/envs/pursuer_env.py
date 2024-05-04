@@ -390,13 +390,7 @@ class PursuerEnv(gymnasium.Env):
 
         step_reward,done = self.get_reward()
         reward   += step_reward #+ time_penalty
-        # if self.init_counter % 300 == 0:
-        #     print("Step", self.init_counter, self.time_limit)
-        #     print("x, y, z", 
-        #           observation['ego'][0], 
-        #           observation['ego'][1], 
-        #           observation['ego'][2])
-            
+        
         #check if max episode steps reached
         return observation, reward, done, False, info
     
