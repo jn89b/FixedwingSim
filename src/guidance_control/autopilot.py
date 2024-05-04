@@ -7,7 +7,7 @@ from simple_pid import PID
 from jsbsim_backend.simulator import FlightDynamics
 from scipy import interpolate
 from guidance_control.navigation import LocalNavigation
-
+from conversions import mps_to_ktas, meters_to_feet, feet_to_meters
 
 # Should this be derived from simulation ?
 # def __init__(self):
@@ -145,6 +145,14 @@ class X8Autopilot:
         self.flag = False
         self.track_id = -1
         self.state = 0
+        
+        ## Parameters for the controller from PX4 controller    
+        self.time_const_pitch = 0.4 # seconds
+        self.time_const_roll = 0.4 # seconds
+        
+        self.max_pitch_rate = np.deg2rad(60) # rad/s
+        self.max_roll_rate = np.deg2rad(70) # rad/s
+        self.max_yaw_rate = np.deg2rad(50) # rad/s
 
     def test_controls(self, elevator=0, aileron=0, tla=0) -> None:
         """
@@ -158,6 +166,38 @@ class X8Autopilot:
         self.sim[prp.elevator_cmd] = elevator
         self.sim[prp.aileron_cmd] = aileron
         self.sim[prp.throttle_cmd] = tla
+
+    def control_pitch(self, pitch_sp_rad:float, 
+                      euler_yaw_rate_sp_rad:float) -> float:
+        """
+        Based on PX4 controller for pitch attitude
+        
+        returns pitch_body_rate_sp_rad
+        """
+        
+        pitch_rad = self.sim[prp.pitch_rad]
+        roll_rad = self.sim[prp.roll_rad]
+        
+        pitch_error_rad = pitch_sp_rad - pitch_rad
+        euler_rate_setpoint = pitch_error_rad / self.time_const_pitch
+        
+        #transform setpoint to body angular rates
+        pitch_body_rate_sp_raw = np.cos(roll_rad) * euler_rate_setpoint \
+            + np.cos(pitch_rad) * np.sin(roll_rad) * euler_yaw_rate_sp_rad
+
+        #limit the rate
+        pitch_body_rate_sp_rad = np.clip(pitch_body_rate_sp_raw,
+                                            -self.max_pitch_rate,
+                                            self.max_pitch_rate)
+        
+        return pitch_body_rate_sp_rad
+
+    def pitch_controller(self, pitch_comm: float) -> None:
+        """
+        Based on PX4 controller for pitch attitude
+        """
+        
+        pass
 
     def pitch_hold(self, pitch_comm: float) -> None:
         """
@@ -183,6 +223,36 @@ class X8Autopilot:
         #self.sim['fcs/elevator-cmd-norm'] = output
         self.sim[prp.elevator_cmd] = output
 
+    def control_roll(self, roll_sp_rad:float, 
+                     euler_yaw_rate_sp_rad:float) -> None:
+        """
+        Based on PX4 controller for roll attitude
+        
+        returns roll_body_rate_sp_rad
+        """
+        roll_rad = self.sim[prp.roll_rad]
+        pitch_rad = self.sim[prp.pitch_rad]
+        roll_error = roll_sp_rad - roll_rad
+        euler_rate_setpoint = roll_error / self.time_const_roll
+        
+        #transform setpoint to body angular rates
+        roll_body_rate_sp_raw = euler_rate_setpoint - np.sin(pitch_rad) \
+            * euler_yaw_rate_sp_rad
+            
+        #limit the rate
+        roll_body_rate_sp_rad = np.clip(roll_body_rate_sp_raw, 
+                                    -self.max_roll_rate, 
+                                    self.max_roll_rate)
+        
+        return roll_body_rate_sp_rad
+
+    def roll_controller(self, roll_comm: float) -> None:
+        """
+        Based on PX4 controller for roll attitude
+        """
+        pass
+
+    
     def roll_hold(self, roll_commd_rad: float) -> None:
         """
         Maintains a commanded roll attitude [radians] using a PID controller
@@ -211,6 +281,75 @@ class X8Autopilot:
         # print("output: ", np.rad2deg(output))
         # self.sim['fcs/aileron-cmd-norm'] = output
 
+    def control_yaw(self, roll_sp_rad:float, 
+                    euler_pitch_rate_sp_rad:float) -> None:
+        """
+        Based on PX4 controller for yaw attitude
+        
+        Returns body_rate_sp_rad
+        """
+        roll = self.sim[prp.roll_rad]
+        pitch = self.sim[prp.pitch_rad]
+        airspeed = feet_to_meters(self.sim[prp.airspeed])
+        
+        constrained_roll = None
+        inverted_roll = False
+        
+        #roll is used as a feedforward term and inverted flight needs 
+        # to be handled separately
+        if np.abs(roll) < np.deg2rad(90):
+            constrained_roll = np.clip(roll, -np.deg2rad(80), np.deg2rad(80))
+        else:
+            inverted_roll = True
+            
+            #inverted flight, constrain two extremes of -pi to pi to avoid 
+            # infinite yaw rate 
+            if roll > 0:
+                constrained_roll = np.clip(roll, 
+                                           np.deg2rad(100), 
+                                           np.deg2rad(180))
+            else:
+                #left hemisphere
+                constrained_roll = np.clip(roll,
+                                             -np.deg2rad(180),
+                                             -np.deg2rad(100))
+                
+        constrained_roll = np.clip(constrained_roll,
+                                   -np.abs(roll_sp_rad),
+                                      np.abs(roll_sp_rad))
+
+        if not inverted_roll:
+            
+            # calculate desired yaw rate from coordinated turn constraint
+            # no side slip
+            euler_rate_sp_rad = np.tan(constrained_roll) * np.cos(pitch) \
+                * 9.81 / airspeed
+                
+            #transform setpoint to body angular rates (jacobian)
+            yaw_body_rate_sp_rad = -np.sin(roll) * euler_pitch_rate_sp_rad \
+               + np.cos(roll) * np.sin(pitch) * euler_rate_sp_rad
+            
+            body_rate_sp_rad = np.clip(yaw_body_rate_sp_rad,
+                                        -self.max_yaw_rate,
+                                        self.max_yaw_rate)
+            
+        if not body_rate_sp_rad:
+            body_rate_sp_rad = 0.0
+            
+        return body_rate_sp_rad
+    
+    def px4_attitude_controller(self, roll_sp_rad:float,
+                                pitch_sp_rad:float,
+                                yaw_sp_rad:float,
+                                thrust_sp:float) -> None:
+        
+        roll_body_rate_sp_rad = self.control_roll(roll_sp_rad, yaw_sp_rad)
+        pitch_body_rate_sp_rad = self.control_pitch(pitch_sp_rad, yaw_sp_rad)
+        yaw_body_rate_sp_rad = self.control_yaw(roll_sp_rad, pitch_sp_rad)
+        
+        #from these body rates send to the mixer for the actuators
+        
+            
     def heading_hold(self, heading_comm:float) -> None:
         """
         Maintains a commanded heading [degrees] using a PI controller
