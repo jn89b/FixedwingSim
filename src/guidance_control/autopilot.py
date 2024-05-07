@@ -12,6 +12,75 @@ from conversions import mps_to_ktas, meters_to_feet, feet_to_meters
 # Should this be derived from simulation ?
 # def __init__(self):
 #     super().__init__()
+
+def interpolate(x:float, x_min:float, x_max:float, 
+                y_min:float, y_max:float) -> float:
+    """
+    Linear interpolation function
+    """
+    return y_min + (y_max - y_min) * ((x - x_min) / (x_max - x_min))
+
+class RateController():
+    def __init__(self, 
+                 P:float,
+                 I:float,
+                 D:float,
+                 dt:float,
+                 FFgain:float,
+                 max_I:float,
+                 min_I:float) -> None:
+        self.P = P
+        self.I = I
+        self.D = D
+        self.dt = dt
+        self.FFgain = FFgain
+        self.max_I = max_I
+        self.min_I = min_I
+        self.rate_i = 0.0
+    
+    def update_integral(self, rate_error:float) -> None:
+        """
+        
+        """
+        #prevent further positive control saturation
+        if rate_error > 0:
+            #set minimum rate error to zero
+            rate_error = min(rate_error, 0)
+        
+        #prevent further negative control saturation
+        if rate_error < 0:
+            #set maximum rate error to zero
+            rate_error = max(rate_error, 0)
+            
+		# // I term factor: reduce the I gain with increasing rate error.
+		# // This counteracts a non-linear effect where the integral builds up quickly upon a large setpoint
+		# // change (noticeable in a bounce-back effect after a flip).
+		# // The formula leads to a gradual decrease w/o steps, while only affecting the cases where it should:
+		# // with the parameter set to 400 degrees, up to 100 deg rate error, i_factor is almost 1 (having no effect),
+		# // and up to 200 deg error leads to <25% reduction of I.
+        i_factor = rate_error / math.radians(400)
+        i_factor = max(0.0, 1.0 - i_factor * i_factor)
+        
+        # perform integral update using first order approximation
+        rate_i = self.rate_i + i_factor * self.I * rate_error * self.dt
+        
+        # do not allow the integrator to accumulate more than the maximum output
+        self.rate_i = np.clip(rate_i, self.min_I, self.max_I)
+        
+    def update(self, rate:float, rate_sp:float, 
+               angular_accel:float, dt:float) -> float:
+        """
+        
+        """
+        rate_error = rate_sp - rate
+        
+        torque = (self.P*rate_error) + self.rate_i - (angular_accel*self.D) + \
+            (self.FFgain*rate_sp)
+        
+        self.update_integral(rate_error, self.dt)
+            
+        return torque 
+
 class C172Autopilot:
     def __init__(self, sim):
         self.sim = sim
@@ -153,6 +222,51 @@ class X8Autopilot:
         self.max_pitch_rate = np.deg2rad(60) # rad/s
         self.max_roll_rate = np.deg2rad(70) # rad/s
         self.max_yaw_rate = np.deg2rad(50) # rad/s
+
+        #trim parameters
+        self.trim_roll_rad = 0.0
+        self.trim_pitch_rad = 0.0
+        self.trim_yaw_rad = 0.0
+        
+
+        #these values are set from default PX4 controller
+        self.roll_rate_control = RateController(
+            P=0.05,
+            I=0.1,
+            D=0.0,
+            dt=self.sim.sim_dt,
+            FFgain=0.5,
+            max_I=0.2,
+            min_I=-0.2
+        )
+        
+        self.pitch_rate_control = RateController(
+            P=0.08,
+            I=0.1,
+            D=0.0,
+            dt=self.sim.sim_dt,
+            FFgain=0.5,
+            max_I=0.4,
+            min_I=-0.4
+        )
+        
+        self.yaw_rate_control = RateController(
+            P=0.05,
+            I=0.1,
+            D=0.0,
+            dt=self.sim.sim_dt,
+            FFgain=0.3,
+            max_I=0.1,
+            min_I=-0.1
+        )
+
+        self.controller_list = [self.roll_rate_control, 
+                                self.pitch_rate_control, 
+                                self.yaw_rate_control]
+        
+        self.min_airspeed = 15
+        self.trim_airspeed = 25
+        self.max_airspeed = 35
 
     def test_controls(self, elevator=0, aileron=0, tla=0) -> None:
         """
@@ -341,26 +455,117 @@ class X8Autopilot:
     def px4_attitude_controller(self, roll_sp_rad:float,
                                 pitch_sp_rad:float,
                                 yaw_sp_rad:float,
-                                thrust_sp:float) -> None:
+                                thrust_sp:float) -> np.ndarray:
+        """
+        Returns the torque commands for the aircraft based on 
+        the PX4 controller the cascaded controller
+
+        """
         
         # this is the the end of the first part of the cascade controller
         roll_body_rate_sp_rad = self.control_roll(roll_sp_rad, yaw_sp_rad)
         pitch_body_rate_sp_rad = self.control_pitch(pitch_sp_rad, yaw_sp_rad)
         yaw_body_rate_sp_rad = self.control_yaw(roll_sp_rad, pitch_sp_rad)
         
-        #get the current rates of the controller
+        #get the current angular rates of the controller
         current_roll_rate = self.sim[prp.p_radps]
         current_pitch_rate = self.sim[prp.q_radps]
         current_yaw_rate = self.sim[prp.r_radps]
         
-        #get the acceleration of the controller
+        #get the angular acceleration of the controller
         current_roll_accel = self.sim[prp.pdot_radps2]
         current_pitch_accel = self.sim[prp.qdot_radps2]
         current_yaw_accel = self.sim[prp.rdot_radps2]
         
+        #get trim conditions 
+        trim_r = self.trim_roll_rad
+        trim_p = self.trim_pitch_rad
+        trim_y = self.trim_yaw_rad
         
+        airspeed = feet_to_meters(self.sim[prp.airspeed])
         
+        #bi-linear interpolation for airspeed for actuator saturation
+        if airspeed < self.trim_airspeed:
+            trim_r += interpolate(airspeed, self.min_airspeed, 
+                                self.trim_airspeed, 0.0, 0.0)
+            trim_p += interpolate(airspeed, self.min_airspeed,
+                                    self.trim_airspeed, 0.0, 0.0)
+            trim_y += interpolate(airspeed, self.min_airspeed,
+                                    self.trim_airspeed, 0.0, 0.0)
+        else:
+            trim_r += interpolate(airspeed, self.trim_airspeed,
+                                    self.max_airspeed, 0.0, 0.0)
+            trim_p += interpolate(airspeed, self.trim_airspeed,
+                                    self.max_airspeed, 0.0, 0.0)
+            trim_y += interpolate(airspeed, self.trim_airspeed,
+                                    self.max_airspeed, 0.0, 0.0)
             
+        # run controller now 
+		# Run attitude RATE controllers which need the desired attitudes 
+        # from above, add trim.
+        angular_acc_roll_sp = self.roll_rate_control.update(
+            current_roll_rate, roll_body_rate_sp_rad, 
+            current_roll_accel, self.sim.sim_dt)
+        
+        angular_acc_pitch_sp = self.pitch_rate_control.update(
+            current_pitch_rate, pitch_body_rate_sp_rad, 
+            current_pitch_accel, self.sim.sim_dt)
+        
+        angular_acc_yaw_sp = self.yaw_rate_control.update(
+            current_yaw_rate, yaw_body_rate_sp_rad, 
+            current_yaw_accel, self.sim.sim_dt)
+        
+        # get feedforward terms
+        ffg_rollrate = self.roll_rate_control.FFgain 
+        ffg_pitchrate = self.pitch_rate_control.FFgain
+        ffg_yawrate = self.yaw_rate_control.FFgain
+        
+        feedforward_rollrate = ffg_rollrate * roll_body_rate_sp_rad
+        feedforward_pitchrate = ffg_pitchrate * pitch_body_rate_sp_rad
+        feedforward_yawrate = ffg_yawrate * yaw_body_rate_sp_rad
+
+        #airspeed scaling is 1*1 so not included
+        u_roll_acc = angular_acc_roll_sp + feedforward_rollrate
+        u_pitch_acc = angular_acc_pitch_sp + feedforward_pitchrate
+        u_yaw_acc = angular_acc_yaw_sp + feedforward_yawrate
+        
+        #check if 
+        torque_sp = np.array([u_roll_acc, u_pitch_acc, u_yaw_acc])
+        if np.isfinite(u_roll_acc):
+            u_roll_acc = np.clip(u_roll_acc+trim_r, 
+                                 -self.max_roll_rate, 
+                                 self.max_roll_rate)
+            torque_sp[0] = u_roll_acc
+        else:
+            self.roll_rate_control.rate_i = 0.0
+            torque_sp[0] = trim_r
+            
+            
+        if np.isfinite(u_pitch_acc):
+            u_pitch_acc = np.clip(u_pitch_acc+trim_p, 
+                                  -self.max_pitch_rate, 
+                                  self.max_pitch_rate)
+            torque_sp[1] = u_pitch_acc
+        else:
+            self.pitch_rate_control.rate_i = 0.0
+            torque_sp[1] = trim_p
+            
+        if np.isfinite(u_yaw_acc):
+            u_yaw_acc = np.clip(u_yaw_acc+trim_y, 
+                                -self.max_yaw_rate, 
+                                self.max_yaw_rate)
+            torque_sp[2] = u_yaw_acc
+        else:
+            self.yaw_rate_control.rate_i = 0.0
+            torque_sp[2] = trim_y
+        
+        # add feed-forward from roll control output to yaw control
+        # output this can be used to counteract the adverse yaw effect
+        # when rolling the aircraft
+        torque_sp[2] = np.clip(torque_sp[2] + 0.0 * torque_sp[0], 
+                               -1.0, 1.0)   
+        
+        
     def heading_hold(self, heading_comm:float) -> None:
         """
         Maintains a commanded heading [degrees] using a PI controller

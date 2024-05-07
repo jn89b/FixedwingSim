@@ -17,6 +17,7 @@ from jsbsim_backend.aircraft import Aircraft, x8
 
 import gymnasium as gym
 import math 
+import matplotlib.pyplot as plt
 from src.sim_interface import OpenGymInterface
 from src.conversions import meters_to_feet, mps_to_ktas
 from src.conversions import local_to_global_position
@@ -226,7 +227,7 @@ for i in range(N):
         # heading_cmd = cartesian_to_navigation_radians(arctan_cmd)
         # autopilot.heading_hold(np.rad2deg(heading_cmd)) 
         autopilot.altitude_hold(meters_to_feet(z_cmd))
-                
+
         ## if you want to control the heading based on the MPC solution
         # dy = y_cmd - init_states[1]
         # dx = x_cmd - init_states[0]
@@ -234,8 +235,7 @@ for i in range(N):
         # heading_cmd = cartesian_to_navigation_radians(heading_cmd)
         # autopilot.heading_hold(np.rad2deg(heading_cmd))
         # autopilot.roll_hold(roll_cmd)
-        # autopilot.heading_hold(h_cmd)
-                
+        # autopilot.heading_hold(h_cmd)                
         gym_adapter.run_backend()
         init_states = gym_adapter.get_observation()
         init_control =[
@@ -254,7 +254,7 @@ for i in range(N):
         airspeed_traj.append(init_states[6])
         time_traj.append(gym_adapter.sim.get_time())
         
-import matplotlib.pyplot as plt
+
 sitl_time = sitl_flight_data['current_time'][N-1] - sitl_flight_data['current_time'][0]
 # sitl_time = np.linspace(0, sitl_time, len(x_traj))
 print("sitl time: ", sitl_time)
@@ -292,6 +292,5 @@ ax[3].plot(sitl_time, airspeed_sitl, label='Airspeed SITL')
 
 for a in ax:
     a.legend()
-    
 
 plt.show()
