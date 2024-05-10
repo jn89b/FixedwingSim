@@ -20,6 +20,64 @@ def interpolate(x:float, x_min:float, x_max:float,
     """
     return y_min + (y_max - y_min) * ((x - x_min) / (x_max - x_min))
 
+
+class TECSParameters():
+    def __init__(self) -> None:
+       # Vehicle specific params
+        self.max_sink_rate = 0.0          # Maximum sink rate [m/s]
+        self.min_sink_rate = 0.0          # Minimum sink rate [m/s]
+        self.max_climb_rate = 0.0         # Climb rate at max throttle [m/s]
+        self.vert_accel_limit = 0.0       # Max vertical acceleration [m/s²]
+        self.equivalent_airspeed_trim = 0.0  # Cruise airspeed [m/s]
+        self.tas_min = 0.0                # Lower limit of true airspeed demand [m/s]
+        self.pitch_max = 0.0              # Max pitch angle [rad]
+        self.pitch_min = 0.0              # Min pitch angle [rad]
+        self.throttle_trim = 0.0          # Normalized throttle at level flight [0,1]
+        self.throttle_max = 0.0           # Upper throttle limit [0,1]
+        self.throttle_min = 0.0           # Lower throttle limit [0,1]
+
+        # Altitude control params
+        self.altitude_error_gain = 0.0    # Altitude error inverse time constant [1/s]
+        self.altitude_setpoint_gain_ff = 0.0  # Gain from altitude demand derivative to climb rate
+
+        # Airspeed control params
+        self.tas_error_percentage = 0.0   # Percentage of airspeed tracking errors [0,1]
+        self.airspeed_error_gain = 0.0    # Airspeed error inverse time constant [1/s]
+
+        # Energy control params
+        self.ste_rate_time_const = 0.0    # Time constant for energy rate [s]
+        self.seb_rate_ff = 0.0            # Energy balance rate feedforward gain
+
+        # Pitch control params
+        self.pitch_speed_weight = 0.0     # Speed control weighting for pitch calculation
+        self.integrator_gain_pitch = 0.0  # Integrator gain for pitch demand
+        self.pitch_damping_gain = 0.0     # Damping gain for pitch demand [s]
+
+        # Throttle control params
+        self.integrator_gain_throttle = 0.0  # Integrator gain for throttle demand
+        self.throttle_damping_gain = 0.0  # Damping gain for throttle demand [s]
+        self.throttle_slewrate = 0.0      # Throttle demand slew rate [1/s]
+
+        # Load factor parameters
+        self.load_factor_correction = 0.0    # Gain from load factor to energy rate [m²/s³]
+        self.load_factor = 0.0               # Additional normal load factor
+
+    def display_params(self):
+        """A sample method to display parameters for debugging."""
+        for attr, value in self.__dict__.items():
+            print(f"{attr}: {value}")
+
+
+class TECSController():
+    def __init__(self, 
+                 TECSParams:TECSParameters,
+                 dt:float) -> None:
+        
+        self.TECSParams = TECSParams
+        self.dt = dt
+
+    # def update(self, setpoint:Set)
+
 class RateController():
     def __init__(self, 
                  P:float,
@@ -37,6 +95,7 @@ class RateController():
         self.max_I = max_I
         self.min_I = min_I
         self.rate_i = 0.0
+        self.is_saturated = False
     
     def update_integral(self, rate_error:float) -> None:
         """
@@ -65,7 +124,8 @@ class RateController():
         rate_i = self.rate_i + i_factor * self.I * rate_error * self.dt
         
         # do not allow the integrator to accumulate more than the maximum output
-        self.rate_i = np.clip(rate_i, self.min_I, self.max_I)
+        if np.isfinite(rate_i):
+            self.rate_i = np.clip(rate_i, self.min_I, self.max_I)
         
     def update(self, rate:float, rate_sp:float, 
                angular_accel:float, dt:float) -> float:
@@ -77,7 +137,7 @@ class RateController():
         torque = (self.P*rate_error) + self.rate_i - (angular_accel*self.D) + \
             (self.FFgain*rate_sp)
         
-        self.update_integral(rate_error, self.dt)
+        self.update_integral(rate_error)
             
         return torque 
 
@@ -246,8 +306,8 @@ class X8Autopilot:
             D=0.0,
             dt=self.sim.sim_dt,
             FFgain=0.5,
-            max_I=0.4,
-            min_I=-0.4
+            max_I=0.1,
+            min_I=-0.1
         )
         
         self.yaw_rate_control = RateController(
@@ -322,10 +382,10 @@ class X8Autopilot:
         """
         error = pitch_comm - self.sim[prp.pitch_rad]
         #serror = pitch_comm - self.sim.get_property_value('attitude/pitch-rad') #self.sim[prp.pitch_rad]
-        kp = 1.0
-        ki = 0.0
-        kd = 0.03
-        controller = PID(kp, ki, 0.0)
+        kp = 0.6
+        ki = 0.1
+        kd = 0.05
+        controller = PID(kp, ki, kd)
         output = controller(error)
         # self.sim[prp.elevator_cmd] = output
         rate = self.sim[prp.q_radps]
@@ -376,10 +436,7 @@ class X8Autopilot:
         """
         # Nichols Ziegler tuning Pcr = 0.29, Kcr = 0.0380, PID chosen
         error = roll_commd_rad - self.sim[prp.roll_rad]
-        # print("error: ", np.rad2deg(error))
-        
-        # error = roll_commd_rad - self.sim.get_property_value('attitude/phi-rad')
-        kp = 0.20
+        kp = 0.8
         ki = kp*0.0  # tbd, should use rlocus plot and pole-placement
         kd = 0.089
         controller = PID(kp, ki, 0.0)
@@ -389,11 +446,7 @@ class X8Autopilot:
         rate_controller = PID(kd, 0.0, 0.0)
         rate_output = rate_controller(rate)
         output = -output+rate_output
-        # print(output)
         self.sim[prp.aileron_cmd] = output
-        # print("error: ", np.rad2deg(error))
-        # print("output: ", np.rad2deg(output))
-        # self.sim['fcs/aileron-cmd-norm'] = output
 
     def control_yaw(self, roll_sp_rad:float, 
                     euler_pitch_rate_sp_rad:float) -> None:
@@ -432,8 +485,8 @@ class X8Autopilot:
                                    -np.abs(roll_sp_rad),
                                       np.abs(roll_sp_rad))
 
+        body_rate_sp_rad = None
         if not inverted_roll:
-            
             # calculate desired yaw rate from coordinated turn constraint
             # no side slip
             euler_rate_sp_rad = np.tan(constrained_roll) * np.cos(pitch) \
@@ -452,6 +505,12 @@ class X8Autopilot:
             
         return body_rate_sp_rad
     
+    
+    def px4_position_controller(self) -> None:
+        """
+        https://docs.px4.io/main/en/flight_stack/controller_diagrams.html
+        """
+        
     def px4_attitude_controller(self, roll_sp_rad:float,
                                 pitch_sp_rad:float,
                                 yaw_sp_rad:float,
@@ -466,11 +525,17 @@ class X8Autopilot:
         roll_body_rate_sp_rad = self.control_roll(roll_sp_rad, yaw_sp_rad)
         pitch_body_rate_sp_rad = self.control_pitch(pitch_sp_rad, yaw_sp_rad)
         yaw_body_rate_sp_rad = self.control_yaw(roll_sp_rad, pitch_sp_rad)
+        print("roll body rate: ", np.rad2deg(roll_body_rate_sp_rad))
+        print("pitch body rate: ", np.rad2deg(pitch_body_rate_sp_rad))
+        print("yaw body rate: ", np.rad2deg(yaw_body_rate_sp_rad))
         
         #get the current angular rates of the controller
         current_roll_rate = self.sim[prp.p_radps]
         current_pitch_rate = self.sim[prp.q_radps]
         current_yaw_rate = self.sim[prp.r_radps]
+        print("current roll rate: ", np.rad2deg(current_roll_rate))
+        print("current pitch rate: ", np.rad2deg(current_pitch_rate))
+        print("current yaw rate: ", np.rad2deg(current_yaw_rate))
         
         #get the angular acceleration of the controller
         current_roll_accel = self.sim[prp.pdot_radps2]
@@ -484,6 +549,7 @@ class X8Autopilot:
         
         airspeed = feet_to_meters(self.sim[prp.airspeed])
         
+        #check if control rates are saturated
         #bi-linear interpolation for airspeed for actuator saturation
         if airspeed < self.trim_airspeed:
             trim_r += interpolate(airspeed, self.min_airspeed, 
@@ -533,18 +599,17 @@ class X8Autopilot:
         torque_sp = np.array([u_roll_acc, u_pitch_acc, u_yaw_acc])
         if np.isfinite(u_roll_acc):
             u_roll_acc = np.clip(u_roll_acc+trim_r, 
-                                 -self.max_roll_rate, 
-                                 self.max_roll_rate)
+                                 -1.0, 
+                                 1.0)
             torque_sp[0] = u_roll_acc
         else:
             self.roll_rate_control.rate_i = 0.0
             torque_sp[0] = trim_r
             
-            
         if np.isfinite(u_pitch_acc):
             u_pitch_acc = np.clip(u_pitch_acc+trim_p, 
-                                  -self.max_pitch_rate, 
-                                  self.max_pitch_rate)
+                                  -1.0, 
+                                  1.0)
             torque_sp[1] = u_pitch_acc
         else:
             self.pitch_rate_control.rate_i = 0.0
@@ -552,8 +617,8 @@ class X8Autopilot:
             
         if np.isfinite(u_yaw_acc):
             u_yaw_acc = np.clip(u_yaw_acc+trim_y, 
-                                -self.max_yaw_rate, 
-                                self.max_yaw_rate)
+                                -1.0, 
+                                1.0)
             torque_sp[2] = u_yaw_acc
         else:
             self.yaw_rate_control.rate_i = 0.0
@@ -562,13 +627,20 @@ class X8Autopilot:
         # add feed-forward from roll control output to yaw control
         # output this can be used to counteract the adverse yaw effect
         # when rolling the aircraft
-        torque_sp[2] = np.clip(torque_sp[2] + 0.0 * torque_sp[0], 
+        torque_sp[2] = np.clip(torque_sp[2] + (0.0 * torque_sp[0]), 
                                -1.0, 1.0)   
+        
+        self.sim[prp.aileron_cmd] = torque_sp[0]
+        self.sim[prp.elevator_cmd] = 0.0
+        # self.sim[prp.rudder_cmd] = torque_sp[2]
         
         
     def heading_hold(self, heading_comm:float) -> None:
         """
         Maintains a commanded heading [degrees] using a PI controller
+
+        Command reference is the desired heading in degrees
+        Where 0 degrees is North, 90 degrees is East, 180 degrees is South, 270 degrees is West
 
         :param heading_comm: commanded heading [degrees]
         :return: None
@@ -579,13 +651,14 @@ class X8Autopilot:
         error = heading_comm - np.rad2deg(self.sim[prp.heading_rad])
         # if abs(error) > 2:
         #     self.roll_hold(np.deg2rad(0))
-        #     return
-        
+        #     return        
         # error = heading_comm - self.sim[prp.heading_rad]
-        # print("error: ", error)
         #print("attitude/psi-true-deg", self.sim.get_property_value('attitude/heading-true-deg'))
         #error = heading_comm_dg - self.sim.get_property_value('attitude/psi-true-deg')
-        # Ensure the aircraft always turns the shortest way round
+        # Ensure the aircraft always tu rns the shortest way round
+        
+        #wrap error between 
+        
         if error < -180:
             error = error + 360
         if error > 180:
@@ -595,8 +668,10 @@ class X8Autopilot:
         # if error > math.pi:
         #     error = error - 2*math.pi
         # print(error)
-        kp = -2.0023 * 0.005
-        ki = -0.6382 * 0.005
+        # kp = -2.0023 * 0.005
+        # ki = -0.6382 * 0.005
+        kp = -0.6
+        ki = -0.1
         heading_controller = PID(kp, ki, 0.0)
         output = heading_controller(error)
         # Prevent over-bank +/- 30 radians
@@ -643,13 +718,15 @@ class X8Autopilot:
         error = altitude_comm - self.sim[prp.altitude_sl_ft]
         #error = altitude_comm - self.sim.get_property_value("position/h-sl-ft")
         # print('error: ', error)
-        kp = 0.1
-        ki = 0.6
-        altitude_controller = PID(kp, ki, 0)
+        kp = 0.3
+        kd = 0.1
+        # kp = 0.3
+        ki = 0.1
+        altitude_controller = PID(kp, ki, kd)
         output = altitude_controller(-error)
         # prevent excessive pitch +/- 15 degrees
-        if output < - 10 * (math.pi / 180):
-            output = - 10 * (math.pi / 180)
+        if output < - 15 * (math.pi / 180):
+            output = - 15 * (math.pi / 180)
         if output > 15 * (math.pi / 180):
             output = 15 * (math.pi / 180)
         self.pitch_hold(output)

@@ -35,16 +35,19 @@ def init_mpc_controller(mpc_control_constraints:dict,
     plane_mpc.init_optimization_problem()
     return plane_mpc
 
-def cartesian_to_navigation_radians( 
+def enu_heading_to_ned_rads( 
         cartesian_angle_radians:float) -> float:
     """
     Converts a Cartesian angle in radians to a navigation 
     system angle in radians.
-    North is 0 radians, East is π/2 radians, 
-    South is π radians, and West is 3π/2 radians.
     
     Parameters:
     - cartesian_angle_radians: Angle in radians in the Cartesian coordinate system.
+        
+    East = 0 radians
+    North = π/2 radians
+    West = π radians
+    South = 3π/2 radians
     
     Returns:
     - A navigation system angle in radians.
@@ -74,8 +77,10 @@ airspeed_sitl = sitl_flight_data['vel']
 
 global_pos = local_to_global_position([x_pos, y_pos, z_pos])
 
+yaw_ned = enu_heading_to_ned_rads(heading_sitl[0])
+
 init_state_dict = {
-    "ic/u-fps": mps_to_ktas(airspeed_sitl[0]),
+    "ic/u-fps": meters_to_feet(airspeed_sitl[0]),
     "ic/v-fps": 0.0,
     "ic/w-fps": 0.0,
     "ic/p-rad_sec": 0.0,
@@ -84,7 +89,7 @@ init_state_dict = {
     "ic/h-sl-ft": meters_to_feet(global_pos[2]),
     "ic/long-gc-deg": global_pos[0],
     "ic/lat-gc-deg": global_pos[1],
-    "ic/psi-true-deg": np.rad2deg(heading_sitl[0]),
+    "ic/psi-true-deg": np.rad2deg(yaw_ned),
     "ic/theta-deg": np.rad2deg(pitch_sitl[0]),
     "ic/phi-deg": np.rad2deg(roll_sitl[0]),
     "ic/alpha-deg": 0.0,
@@ -173,6 +178,9 @@ pitch_traj = []
 heading_traj = []
 airspeed_traj = []
 time_traj = []
+h_cmd_traj = []
+x_ctrl = []
+y_ctrl = []
 
 dt = 0.03
 #this is how long the control loop will run 
@@ -181,7 +189,6 @@ control_freq = int(1/dt)
 sampling_ratio = int(jsb_freq/control_freq)
 
 control_counter = 0
-
 for i in range(N):
 #for i in range(len(x_sitl)):
     # solution_results, end_time = mpc_control.get_solution(
@@ -207,25 +214,38 @@ for i in range(N):
     z_cmd = z_sitl[i]
     r_cmd = roll_cmd[i]
     p_cmd = pitch_cmd[i]
-    #h_cmd = heading_cmd[i]
+    h_cmd = heading_cmd[i]
     a_cmd = airspeed_cmd[i]
-    autopilot.roll_hold(r_cmd)
-    # autopilot.pitch_hold(p_cmd)
+    #autopilot.roll_hold(r_cmd)
+    #autopilot.pitch_hold(p_cmd)
+    # print("heading cmd deg: ", heading_cmd[i])
+    # autopilot.heading_hold(np.rad2deg(-heading_cmd[i]))
     autopilot.airspeed_hold_w_throttle(mps_to_ktas(a_cmd))
 
     for j in range(sampling_ratio):
+        print("i: ", i)
         #check if 
         # ## if you want to control the heading based on line of sight
         # dy = final_states[1] - init_states[1]
         # dx = final_states[0] - init_states[0]
 
         # # print("x and y cmd: ", x_cmd, y_cmd)
-        # print("heading cmd deg: ", np.rad2deg(arctan_cmd))
-        # dy = y_cmd - init_states[1]
-        # dx = x_cmd - init_states[0]
-        # arctan_cmd = np.arctan2(dy, dx)
-        # heading_cmd = cartesian_to_navigation_radians(arctan_cmd)
-        # autopilot.heading_hold(np.rad2deg(heading_cmd)) 
+        dy = y_cmd - init_states[1]
+        dx = x_cmd - init_states[0]
+        arctan_cmd_enu = np.arctan2(dy, dx)
+        h_cmd_ned = enu_heading_to_ned_rads(h_cmd)
+        yaw_cmd = enu_heading_to_ned_rads(np.deg2rad(300))
+        print("h_cmd deg: ", np.rad2deg(yaw_cmd))
+        #print("heading cmd deg: ", np.rad2deg(yaw_cmd))
+        print("heading cmd deg: ", i)
+        autopilot.heading_hold(np.rad2deg(h_cmd_ned)) 
+        # autopilot.px4_attitude_controller(roll_sp_rad=r_cmd, pitch_sp_rad=p_cmd,
+        #                                    yaw_sp_rad=0.0, thrust_sp=mps_to_ktas(a_cmd))
+        # autopilot.px4_attitude_controller(roll_sp_rad=np.deg2rad(20.0),
+        #                                      pitch_sp_rad=np.deg2rad(0),
+        #                                      yaw_sp_rad=0.0, thrust_sp=mps_to_ktas(a_cmd)) 
+        
+
         autopilot.altitude_hold(meters_to_feet(z_cmd))
 
         ## if you want to control the heading based on the MPC solution
@@ -233,9 +253,7 @@ for i in range(N):
         # dx = x_cmd - init_states[0]
         # arctan_cmd = np.arctan2(dy, dx)
         # heading_cmd = cartesian_to_navigation_radians(heading_cmd)
-        # autopilot.heading_hold(np.rad2deg(heading_cmd))
-        # autopilot.roll_hold(roll_cmd)
-        # autopilot.heading_hold(h_cmd)                
+      
         gym_adapter.run_backend()
         init_states = gym_adapter.get_observation()
         init_control =[
@@ -252,6 +270,7 @@ for i in range(N):
         pitch_traj.append(init_states[4])
         heading_traj.append(init_states[5])
         airspeed_traj.append(init_states[6])
+        h_cmd_traj.append(h_cmd)
         time_traj.append(gym_adapter.sim.get_time())
         
 
@@ -286,6 +305,7 @@ ax[1].plot(sitl_time, np.rad2deg(pitch_sitl), label='Pitch SITL')
 
 ax[2].plot(time_traj,np.rad2deg(heading_traj), label='Heading')
 ax[2].plot(sitl_time, np.rad2deg(heading_sitl), label='Heading SITL')
+ax[2].plot(time_traj, np.rad2deg(h_cmd_traj), label='Heading Cmd')
 
 ax[3].plot(time_traj,airspeed_traj, label='Airspeed')
 ax[3].plot(sitl_time, airspeed_sitl, label='Airspeed SITL')
