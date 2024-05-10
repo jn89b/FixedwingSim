@@ -55,7 +55,7 @@ def enu_heading_to_ned_rads(
     new_yaw = math.pi/2 - cartesian_angle_radians
     return new_yaw
 
-sitl_flight_data = pd.read_csv('sitl_flight_data.csv')
+sitl_flight_data = pd.read_csv('sitl_flight_data_2.csv')
 x_pos = sitl_flight_data['x_pos'][0]
 y_pos = sitl_flight_data['y_pos'][0]
 z_pos = sitl_flight_data['z_pos'][0]
@@ -179,13 +179,23 @@ airspeed_traj = []
 time_traj = []
 h_cmd_traj = []
 r_cmd_traj = []
+p_cmd_traj = []
+z_cmd_traj = []
 x_ctrl = []
 y_ctrl = []
 
-dt = 0.03
+#get dt from time interval
+
+sitl_time = sitl_flight_data['current_time'][N-1] - sitl_flight_data['current_time'][0]
+# sitl_time = np.linspace(0, sitl_time, len(x_traj))
+#print("sitl time: ", sitl_time)
+sitl_time = sitl_flight_data['current_time'] - sitl_flight_data['current_time'][0]
+#control_dt = sitl_time[1] - sitl_time[0]
+control_dt = 0.025
 #this is how long the control loop will run 
 #round control freq to the nearest integer
-control_freq = int(1/dt)
+control_freq = int(1/control_dt)
+# control_freq = 50
 sampling_ratio = int(jsb_freq/control_freq)
 
 control_counter = 0
@@ -221,9 +231,13 @@ for i in range(N):
     # print("heading cmd deg: ", heading_cmd[i])
     # autopilot.heading_hold(np.rad2deg(-heading_cmd[i]))
     autopilot.airspeed_hold_w_throttle(mps_to_ktas(a_cmd))
+    r_cmd_traj.append(r_cmd)
 
-    for j in range(sampling_ratio):
-        #check if 
+    current_time = gym_adapter.sim.get_time()
+    elapsed_time = current_time - gym_adapter.sim.get_time()
+    
+    while elapsed_time <= control_dt:
+    
         # ## if you want to control the heading based on line of sight
         # dy = final_states[1] - init_states[1]
         # dx = final_states[0] - init_states[0]
@@ -232,11 +246,14 @@ for i in range(N):
         # dy = y_cmd - init_states[1]
         # dx = x_cmd - init_states[0]
         # arctan_cmd_enu = np.arctan2(dy, dx)
+        
         h_cmd_ned = enu_heading_to_ned_rads(h_cmd)        
         autopilot.heading_hold(np.rad2deg(h_cmd_ned)) 
+        # autopilot.pitch_hold(p_cmd)
         autopilot.altitude_hold(meters_to_feet(z_cmd))
 
         gym_adapter.run_backend()
+        
         init_states = gym_adapter.get_observation()
         init_control =[
             init_states[3],
@@ -254,7 +271,44 @@ for i in range(N):
         airspeed_traj.append(init_states[6])
         h_cmd_traj.append(h_cmd)
         time_traj.append(gym_adapter.sim.get_time())
-        r_cmd_traj.append(r_cmd)
+        p_cmd_traj.append(p_cmd)
+        z_cmd_traj.append(z_cmd)
+        elapsed_time = gym_adapter.sim.get_time() - current_time
+            
+    # for j in range(sampling_ratio): 
+    #     # ## if you want to control the heading based on line of sight
+    #     # dy = final_states[1] - init_states[1]
+    #     # dx = final_states[0] - init_states[0]
+
+    #     # # print("x and y cmd: ", x_cmd, y_cmd)
+    #     # dy = y_cmd - init_states[1]
+    #     # dx = x_cmd - init_states[0]
+    #     # arctan_cmd_enu = np.arctan2(dy, dx)
+        
+    #     h_cmd_ned = enu_heading_to_ned_rads(h_cmd)        
+    #     autopilot.heading_hold(np.rad2deg(h_cmd_ned)) 
+    #     # autopilot.pitch_hold(p_cmd)
+    #     autopilot.altitude_hold(meters_to_feet(z_cmd))
+
+    #     gym_adapter.run_backend()
+    #     init_states = gym_adapter.get_observation()
+    #     init_control =[
+    #         init_states[3],
+    #         init_states[4],
+    #         init_states[5],
+    #         init_states[6]
+    #     ]
+                
+    #     x_traj.append(init_states[0])
+    #     y_traj.append(init_states[1])
+    #     z_traj.append(init_states[2])
+    #     roll_traj.append(init_states[3])    
+    #     pitch_traj.append(init_states[4])
+    #     heading_traj.append(init_states[5])
+    #     airspeed_traj.append(init_states[6])
+    #     h_cmd_traj.append(h_cmd)
+    #     time_traj.append(gym_adapter.sim.get_time())
+    #     p_cmd_traj.append(p_cmd)
 
 sitl_time = sitl_flight_data['current_time'][N-1] - sitl_flight_data['current_time'][0]
 # sitl_time = np.linspace(0, sitl_time, len(x_traj))
@@ -278,14 +332,14 @@ ax.plot(x_sitl, y_sitl, z_sitl, color='red', label='SITL Trajectory')
 # ax.scatter(x_sitl[-1], y_sitl[-1], z_sitl[-1], color='green', label='SITL End')
 ax.legend()
 
-fig, ax = plt.subplots(4, 1)
+fig, ax = plt.subplots(5, 1)
 ax[0].plot(time_traj,np.rad2deg(roll_traj), label='Roll JSBSIM')
 ax[0].plot(sitl_time, np.rad2deg(roll_sitl), label='Roll SITL')
-ax[0].plot(time_traj, np.rad2deg(r_cmd_traj), label='Roll Cmd', linestyle='dashed')
+ax[0].plot(sitl_time, np.rad2deg(r_cmd_traj), label='Roll Cmd', linestyle='dashed')
 
 ax[1].plot(time_traj,np.rad2deg(pitch_traj), label='Pitch')
 ax[1].plot(sitl_time, np.rad2deg(pitch_sitl), label='Pitch SITL') 
-
+ax[1].plot(time_traj, np.rad2deg(p_cmd_traj), label='Pitch Cmd', linestyle='dashed')
 
 heading_sitl_ned = [enu_heading_to_ned_rads(h) for h in heading_sitl]
 ax[2].plot(time_traj,np.rad2deg(heading_traj), label='Heading')
@@ -294,6 +348,10 @@ ax[2].plot(time_traj, np.rad2deg(h_cmd_traj), label='Heading Cmd')
 
 ax[3].plot(time_traj,airspeed_traj, label='Airspeed')
 ax[3].plot(sitl_time, airspeed_sitl, label='Airspeed SITL')
+
+ax[4].plot(time_traj,z_traj, label='Altitude')
+ax[4].plot(sitl_time, z_sitl, label='Altitude SITL')
+ax[4].plot(time_traj, z_cmd_traj, label='Altitude Cmd', linestyle='dashed')
 
 for a in ax:
     a.legend()

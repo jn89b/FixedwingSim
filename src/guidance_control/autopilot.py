@@ -383,14 +383,14 @@ class X8Autopilot:
         error = pitch_comm - self.sim[prp.pitch_rad]
         #serror = pitch_comm - self.sim.get_property_value('attitude/pitch-rad') #self.sim[prp.pitch_rad]
         kp = 0.6
-        ki = 0.1
-        kd = 0.05
+        ki = 0.05
+        kd = 0.1
         controller = PID(kp, ki, kd)
         output = controller(error)
         # self.sim[prp.elevator_cmd] = output
         rate = self.sim[prp.q_radps]
         #rate = self.sim.get_property_value('velocities/q-rad_sec')
-        rate_controller = PID(kd, 0.0, 0.0)
+        rate_controller = PID(0.01, 0.0, 0.0)
         rate_output = rate_controller(rate)
         output = output+rate_output
         #self.sim[prp.elevator_cmd] = output
@@ -719,19 +719,22 @@ class X8Autopilot:
         #print('altitude command: ', altitude_comm)
         error = altitude_comm - self.sim[prp.altitude_sl_ft]
         #error = altitude_comm - self.sim.get_property_value("position/h-sl-ft")
-        # print('error: ', error)
-        kp = 0.3
+        kp = 0.4
         kd = 0.1
         # kp = 0.3
         ki = 0.1
         altitude_controller = PID(kp, ki, kd)
         output = altitude_controller(-error)
         # prevent excessive pitch +/- 15 degrees
-        if output < - 15 * (math.pi / 180):
-            output = - 15 * (math.pi / 180)
-        if output > 15 * (math.pi / 180):
-            output = 15 * (math.pi / 180)
-        self.pitch_hold(output)
+        if output < - 20 * (math.pi / 180):
+            output = - 20 * (math.pi / 180)
+        if output > 20 * (math.pi / 180):
+            output = 20 * (math.pi / 180)
+        if abs(error) <= 1.0:
+            print('error: ', error)
+            self.pitch_hold(0)
+        else:
+            self.pitch_hold(output)
 
     def home_to_target(self, target_northing: float, target_easting: float, target_alt: float) -> bool:
         """
