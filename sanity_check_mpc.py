@@ -55,7 +55,6 @@ def enu_heading_to_ned_rads(
     new_yaw = math.pi/2 - cartesian_angle_radians
     return new_yaw
 
-
 sitl_flight_data = pd.read_csv('sitl_flight_data.csv')
 x_pos = sitl_flight_data['x_pos'][0]
 y_pos = sitl_flight_data['y_pos'][0]
@@ -179,6 +178,7 @@ heading_traj = []
 airspeed_traj = []
 time_traj = []
 h_cmd_traj = []
+r_cmd_traj = []
 x_ctrl = []
 y_ctrl = []
 
@@ -223,37 +223,19 @@ for i in range(N):
     autopilot.airspeed_hold_w_throttle(mps_to_ktas(a_cmd))
 
     for j in range(sampling_ratio):
-        print("i: ", i)
         #check if 
         # ## if you want to control the heading based on line of sight
         # dy = final_states[1] - init_states[1]
         # dx = final_states[0] - init_states[0]
 
         # # print("x and y cmd: ", x_cmd, y_cmd)
-        dy = y_cmd - init_states[1]
-        dx = x_cmd - init_states[0]
-        arctan_cmd_enu = np.arctan2(dy, dx)
-        h_cmd_ned = enu_heading_to_ned_rads(h_cmd)
-        yaw_cmd = enu_heading_to_ned_rads(np.deg2rad(300))
-        print("h_cmd deg: ", np.rad2deg(yaw_cmd))
-        #print("heading cmd deg: ", np.rad2deg(yaw_cmd))
-        print("heading cmd deg: ", i)
-        autopilot.heading_hold(np.rad2deg(h_cmd_ned)) 
-        # autopilot.px4_attitude_controller(roll_sp_rad=r_cmd, pitch_sp_rad=p_cmd,
-        #                                    yaw_sp_rad=0.0, thrust_sp=mps_to_ktas(a_cmd))
-        # autopilot.px4_attitude_controller(roll_sp_rad=np.deg2rad(20.0),
-        #                                      pitch_sp_rad=np.deg2rad(0),
-        #                                      yaw_sp_rad=0.0, thrust_sp=mps_to_ktas(a_cmd)) 
-        
-
-        autopilot.altitude_hold(meters_to_feet(z_cmd))
-
-        ## if you want to control the heading based on the MPC solution
         # dy = y_cmd - init_states[1]
         # dx = x_cmd - init_states[0]
-        # arctan_cmd = np.arctan2(dy, dx)
-        # heading_cmd = cartesian_to_navigation_radians(heading_cmd)
-      
+        # arctan_cmd_enu = np.arctan2(dy, dx)
+        h_cmd_ned = enu_heading_to_ned_rads(h_cmd)        
+        autopilot.heading_hold(np.rad2deg(h_cmd_ned)) 
+        autopilot.altitude_hold(meters_to_feet(z_cmd))
+
         gym_adapter.run_backend()
         init_states = gym_adapter.get_observation()
         init_control =[
@@ -272,7 +254,7 @@ for i in range(N):
         airspeed_traj.append(init_states[6])
         h_cmd_traj.append(h_cmd)
         time_traj.append(gym_adapter.sim.get_time())
-        
+        r_cmd_traj.append(r_cmd)
 
 sitl_time = sitl_flight_data['current_time'][N-1] - sitl_flight_data['current_time'][0]
 # sitl_time = np.linspace(0, sitl_time, len(x_traj))
@@ -299,12 +281,15 @@ ax.legend()
 fig, ax = plt.subplots(4, 1)
 ax[0].plot(time_traj,np.rad2deg(roll_traj), label='Roll JSBSIM')
 ax[0].plot(sitl_time, np.rad2deg(roll_sitl), label='Roll SITL')
+ax[0].plot(time_traj, np.rad2deg(r_cmd_traj), label='Roll Cmd', linestyle='dashed')
 
 ax[1].plot(time_traj,np.rad2deg(pitch_traj), label='Pitch')
 ax[1].plot(sitl_time, np.rad2deg(pitch_sitl), label='Pitch SITL') 
 
+
+heading_sitl_ned = [enu_heading_to_ned_rads(h) for h in heading_sitl]
 ax[2].plot(time_traj,np.rad2deg(heading_traj), label='Heading')
-ax[2].plot(sitl_time, np.rad2deg(heading_sitl), label='Heading SITL')
+ax[2].plot(sitl_time, np.rad2deg(heading_sitl_ned), label='Heading SITL')
 ax[2].plot(time_traj, np.rad2deg(h_cmd_traj), label='Heading Cmd')
 
 ax[3].plot(time_traj,airspeed_traj, label='Airspeed')

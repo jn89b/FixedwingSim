@@ -443,7 +443,8 @@ class X8Autopilot:
         output = controller(error)
         rate = self.sim[prp.p_radps]
         #rate = self.sim.get_property_value('velocities/p-rad_sec')
-        rate_controller = PID(kd, 0.0, 0.0)
+        kp_rate = 0.4
+        rate_controller = PID(kp_rate, 0.0, 0.0)
         rate_output = rate_controller(rate)
         output = -output+rate_output
         self.sim[prp.aileron_cmd] = output
@@ -669,16 +670,17 @@ class X8Autopilot:
         #     error = error - 2*math.pi
         # print(error)
         # kp = -2.0023 * 0.005
-        # ki = -0.6382 * 0.005
-        kp = -0.6
-        ki = -0.1
-        heading_controller = PID(kp, ki, 0.0)
+        ki = -0.6382 * 0.005
+        kp = -0.1
+        # ki = 0.0
+        kd = -0.00
+        heading_controller = PID(kp, ki, kd)
         output = heading_controller(error)
         # Prevent over-bank +/- 30 radians
-        if output < - 30 * (math.pi / 180):
-            output = - 30 * (math.pi / 180)
-        if output > 30 * (math.pi / 180):
-            output = 30 * (math.pi / 180)
+        if output < - 50 * (math.pi / 180):
+            output = - 50 * (math.pi / 180)
+        if output > 50 * (math.pi / 180):
+            output = 50 * (math.pi / 180)
 
         # if output < -np.deg2rad(30):
         #     output = -np.deg2rad(30)
