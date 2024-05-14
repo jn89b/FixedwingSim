@@ -79,7 +79,7 @@ class PursuerEnv(gymnasium.Env):
         
         self.use_random_start = use_random_start        
         self.distance_tolerance = 15
-        self.time_step_constant = 300 #number of steps
+        self.time_step_constant = 500 #number of steps
         #need to figure out the relationship between time and steps 
         self.time_limit = self.time_step_constant 
         self.init_counter = 0
@@ -339,7 +339,7 @@ class PursuerEnv(gymnasium.Env):
             if distance < old_distance:
                 reward += distance - old_distance
             elif distance <= self.distance_tolerance:
-                reward += distance
+                reward += distance - old_distance
                 caught = True
             else:
                 reward += distance - old_distance

@@ -730,11 +730,8 @@ class X8Autopilot:
             output = - 20 * (math.pi / 180)
         if output > 20 * (math.pi / 180):
             output = 20 * (math.pi / 180)
-        if abs(error) <= 1.0:
-            print('error: ', error)
-            self.pitch_hold(0)
-        else:
-            self.pitch_hold(output)
+
+        self.pitch_hold(output)
 
     def home_to_target(self, target_northing: float, target_easting: float, target_alt: float) -> bool:
         """

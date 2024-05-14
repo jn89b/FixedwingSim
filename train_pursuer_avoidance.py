@@ -46,12 +46,12 @@ def init_mpc_controller(mpc_control_constraints:dict,
     return plane_mpc
 
 
-LOAD_MODEL = False
+LOAD_MODEL = True
 TOTAL_TIMESTEPS = 1250000#100000/2 #
-CONTINUE_TRAINING = False
+CONTINUE_TRAINING = True
 
 init_state_dict = {
-    "ic/u-fps": mps_to_ktas(25),
+    "ic/u-fps": meters_to_feet(25),
     "ic/v-fps": 0.0,
     "ic/w-fps": 0.0,
     "ic/p-rad_sec": 0.0,
@@ -135,7 +135,7 @@ gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
 #### This is the environment that will be used for training
 env = gym.make('PursuerEnv', 
                use_random_start = True,
-               num_pursuers = 3,
+               num_pursuers = 2,
                backend_interface=gym_adapter,
                rl_control_constraints=rl_control_constraints,
                mpc_control_constraints=control_constraints,
@@ -145,12 +145,6 @@ env._max_episode_steps = 1000
 
 obs, info = env.reset()
 print("enviroment created")
-
-# action_test = [
-#     1.0, # move x direction
-#     0.0, # move y direction
-#     0.0  # move z direction
-# ]
 
 x_history = []
 y_history = []
@@ -166,7 +160,7 @@ distance_history = []
 model_name ="pursuer_avoidance"
 # model_name = "early_pursuer"
 checkpoint_callback = CheckpointCallback(save_freq=10000, 
-                                        save_path='./models/'+model_name+'_3/',
+                                        save_path='./models/'+model_name+'_4/',
                                         name_prefix=model_name)
 
 if LOAD_MODEL and not CONTINUE_TRAINING:
@@ -197,7 +191,7 @@ else:
                 callback=checkpoint_callback)
     model.save(model_name)
     print("model saved")
-
+    
 # #use DDPG
 # model = DDPG("MultiInputPolicy",
 #              env,

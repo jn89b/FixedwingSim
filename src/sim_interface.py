@@ -244,12 +244,15 @@ class OpenGymInterface(CLSimInterface):
         # self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
 
         sim_hz = self.flight_dynamics_sim_hz
-        control_hz = 10
+        control_hz = 50
         goal_location = np.array([action[0], action[1], action[2]])
         current_location = np.array([init_states[0], init_states[1], init_states[2]])
         distance_tolerance = 5
         
-        for i in range(sim_hz):
+        sampling_ratio = sim_hz // control_hz
+        
+        #for i in range(sim_hz):
+        for i in range(sampling_ratio):
             init_states = self.get_observation()
             current_location = np.array([init_states[0], init_states[1], init_states[2]])
             distance = np.linalg.norm(goal_location - current_location)
@@ -263,8 +266,8 @@ class OpenGymInterface(CLSimInterface):
             
             if distance <= distance_tolerance:
                 return 
-            elif i % control_hz == 0 and i != 0:
-                return
+            # elif i % control_hz == 0 and i != 0:
+            #     return
             else:
                 self.run_backend()
                 evader_observation = self.get_observation()
