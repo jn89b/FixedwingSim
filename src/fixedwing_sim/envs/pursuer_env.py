@@ -422,7 +422,7 @@ class PursuerEnv(gymnasium.Env):
         # v_cmd = self.norm_map_to_real(self.rl_control_constraints['v_cmd_min'],
         #                               self.rl_control_constraints['v_cmd_max'],
         #                               v_norm)
-        
+            
         heading_cmd = self.norm_map_to_real(self.rl_control_constraints['heading_cmd_max'],
                                             self.rl_control_constraints['heading_cmd_min'],
                                             action[0])

@@ -25,7 +25,7 @@ register(
 )
 
 register(
-    id='SimpleKinematicEnv-v1',
+    id='SimpleKinematicEnv-v0',
     entry_point='fixedwing_sim.envs.simple_kinematic_env:SimpleKinematicEnv',
     max_episode_steps=1000,
 )

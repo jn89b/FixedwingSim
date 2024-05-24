@@ -1,16 +1,15 @@
 import numpy as np
-
 import casadi as ca
-
 from matplotlib import pyplot as plt
-
 
 class Plane():
     def __init__(self, 
                  include_time:bool=False,
                  dt_val:float=0.05,
                  max_roll_dg:float=45,
-                 max_pitch_dg:float=25) -> None:
+                 max_pitch_dg:float=25,
+                 min_airspeed_ms:float=12,
+                 max_airspeed_ms:float=30) -> None:
         self.include_time = include_time
         self.dt_val = dt_val
         self.define_states()
@@ -18,6 +17,10 @@ class Plane():
         
         self.max_roll_rad = np.deg2rad(max_roll_dg)
         self.max_pitch_rad = np.deg2rad(max_pitch_dg)
+        self.min_airspeed_ms = min_airspeed_ms
+        self.max_airspeed_ms = max_airspeed_ms
+        self.airspeed_tau = 0.05 #response of system to airspeed command
+        self.pitch_tau = 0.02 #response of system to pitch command
         
     def define_states(self):
         """define the states of your system"""
@@ -58,7 +61,7 @@ class Plane():
         """
         controls for your system
         The controls are the roll, pitch, yaw, and airspeed
-        Pitch is a little weird, if you send positive 
+        If u_psi is 0 the plane will fly straight
         """
         self.u_phi = ca.SX.sym('u_phi')
         self.u_theta = ca.SX.sym('u_theta')
@@ -79,18 +82,18 @@ class Plane():
         NED Frame
         """
         self.g = 9.81 #m/s^2
-        #body to inertia frame 
-        self.x_fdot = self.v_cmd * ca.cos(self.theta_f) * ca.cos(self.psi_f) 
-        self.y_fdot = self.v_cmd * ca.cos(self.theta_f) * ca.sin(self.psi_f)
-        self.z_fdot = -self.v_cmd * ca.sin(self.theta_f)
+        #body to inertia frame
+        self.v_dot = (self.v_cmd - self.v)*(self.dt_val/self.airspeed_tau)
+        self.x_fdot = self.v * ca.cos(self.theta_f) * ca.cos(self.psi_f) 
+        self.y_fdot = self.v * ca.cos(self.theta_f) * ca.sin(self.psi_f)
+        self.z_fdot = -self.v * ca.sin(self.theta_f)
         
-        self.phi_fdot   = self.u_phi 
-        self.theta_fdot = self.u_theta
+        self.phi_fdot   = (self.u_phi - self.phi_f) *(self.dt_val/self.pitch_tau)
+        self.theta_fdot = self.u_theta#(self.u_theta - self.theta_f) *(self.dt_val/self.pitch_tau)
         
         #check if the denominator is zero
-        # self.v_cmd = ca.if_else(self.v_cmd == 0, 1e-6, self.v_cmd)
-        self.v_dot = ca.sqrt(self.x_fdot**2 + self.y_fdot**2 + self.z_fdot**2)
         self.psi_fdot   = self.u_psi + (self.g * (ca.tan(self.phi_f) / self.v_cmd))
+        
 
         # self.t_dot = self.t 
         
@@ -144,6 +147,17 @@ class Plane():
                                -self.max_pitch_rad, 
                                self.max_pitch_rad)
                        
+        #wrap yaw from -pi to pi
+        if next_step[5] > np.pi:
+            next_step[5] -= 2*np.pi
+        elif next_step[5] < -np.pi:
+            next_step[5] += 2*np.pi
+            
+        #clip the airspeed
+        next_step[6] = np.clip(next_step[6], 
+                               self.min_airspeed_ms, 
+                               self.max_airspeed_ms)            
+                       
         #return as numpy row vector
         if use_numeric:
             next_step = np.array(next_step).flatten()
@@ -151,6 +165,7 @@ class Plane():
         else:
             return x + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
     
+
 plane_example = Plane()
 function = plane_example.set_state_space()
 start_states = [
@@ -158,12 +173,12 @@ start_states = [
     0, 0, 0, 0 #attitude and velocity
 ]
 u = [np.deg2rad(0), #roll control 
-     np.deg2rad(5), #pitch control
-     0, #yaw control
-     25] #airspeed
+     np.deg2rad(0), #pitch control
+     np.deg2rad(0), #yaw control, if 0 the plane will fly straight
+     15] #airspeed
 
-N = 50
-dt = 0.01
+N = 1
+dt = plane_example.dt_val
 
 T_end = 25
 N = int(T_end/dt)
@@ -177,35 +192,53 @@ history = {
     'phi':[],
     'theta':[],
     'psi':[],
+    'v':[],
+    'time':[]
 }
+
+airspeed_cmd_history = []
 
 for i in range(N):
     next_step = plane_example.rk45(next_step, u, dt)
-    print(next_step)
+    
+    if i <= N/2:
+        u = [np.deg2rad(0), #roll control 
+            np.deg2rad(0), #pitch control
+            np.deg2rad(0), #yaw control, if 0 the plane will fly straight
+            15] #airspeed
+    else:
+        u = [np.deg2rad(20), #roll control 
+            np.deg2rad(0), #pitch control
+            np.deg2rad(15), #yaw control, if 0 the plane will fly straight
+            15]
+        
+    airspeed_cmd_history.append(u[3])
     history['x'].append(next_step[0])
     history['y'].append(next_step[1])
     history['z'].append(-next_step[2]) #flip this to make z go up 
     history['phi'].append(np.rad2deg(next_step[3]))
     history['theta'].append(np.rad2deg(next_step[4]))
-    history['psi'].append(np.rad2deg(next_step[5]))
+    history['psi'].append(np.rad2deg(next_step[5]))    
+    history['v'].append(next_step[6])
+    history['time'].append(i*dt)
     
+## These are plots for sanity checks is all    
+import matplotlib.pyplot as plt
+# plot in 3D
+fig, ax = plt.subplots(1, 1, subplot_kw={'projection':'3d', 'aspect':'auto'})
+ax.plot(history['x'], history['y'], history['z'])
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
 
-### These are plots for sanity checks is all    
-# import matplotlib.pyplot as plt
-# # plot in 3D
-# fig, ax = plt.subplots(1, 1, subplot_kw={'projection':'3d', 'aspect':'auto'})
-# ax.plot(history['x'], history['y'], history['z'])
-# ax.set_xlabel('X')
-# ax.set_ylabel('Y')
-# ax.set_zlabel('Z')
+fig, ax = plt.subplots(4, 1, figsize=(10, 10))
+ax[0].plot(history['time'],history['phi'], label='phi')
+ax[1].plot(history['time'],history['theta'], label='theta')
+ax[2].plot(history['time'],history['psi'], label='psi')
+ax[3].plot(history['time'],history['v'], label='airspeed')  
+ax[3].plot(history['time'],airspeed_cmd_history, linestyle='-.',label='airspeed_cmd')
+for a in ax:
+    a.legend()
+    a.grid()
 
-# fig, ax = plt.subplots(3, 1, figsize=(10, 10))
-# ax[0].plot(history['phi'], label='phi')
-# ax[1].plot(history['theta'], label='theta')
-# ax[2].plot(history['psi'], label='psi')
-
-# for a in ax:
-#     a.legend()
-#     a.grid()
-
-# plt.show()
+plt.show()

@@ -21,6 +21,7 @@ src/fixedwing_sim/envs/__init__.py
 src/fixedwing_sim/envs/custom_env.py
 src/fixedwing_sim/envs/env_test.py
 src/fixedwing_sim/envs/pursuer_env.py
+src/fixedwing_sim/envs/simple_kinematic_env.py
 src/fixedwing_sim/envs/uav_env.py
 src/fixedwing_sim/envs/uav_mpc_env.py
 src/guidance_control/__init__.py
@@ -51,6 +52,5 @@ src/opt_control/rotation_utils.py
 tests/test.py
 tests/test_gps_conversion.py
 tests/test_import.py
-tests/test_mpc.py
 tests/test_mpc_control.py
 tests/test_pid_control.py
