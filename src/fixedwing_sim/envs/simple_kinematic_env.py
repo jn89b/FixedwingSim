@@ -34,8 +34,7 @@ class SimpleKinematicEnv(gymnasium.Env):
                  start_state:np.ndarray=None,
                  goal_state:np.ndarray=None,
                  distance_capture:float=10,
-                 use_random_start:bool=False,
-                 dt=0.05) -> None:
+                 use_random_start:bool=False) -> None:
         """
         This is a environment that has the kinematic equations of motion for a fixed-wing aircraft.
         See if we can do some basic tasks such as goal following and then
@@ -64,6 +63,7 @@ class SimpleKinematicEnv(gymnasium.Env):
         self.use_random_start = use_random_start
         self.action_space = self.init_action_space()
         self.ego_obs_space = self.init_ego_observation()
+        self.old_distance_from_goal = self.compute_distance(self.start_state[0:3], self.goal_state)
         
         self.observation_space = spaces.Dict({
             'ego': self.ego_obs_space,
@@ -72,13 +72,13 @@ class SimpleKinematicEnv(gymnasium.Env):
         
         self.time_constant = 550 #the time constant of the system
         self.time_limit = self.time_constant
-        self.dt = dt
+        self.dt = self.ego_plane.dt_val
         
     def compute_distance(self, p1: np.ndarray, p2: np.ndarray) -> float:
         """
         Compute the distance between two points.
         """
-        return np.linalg.norm(p1 - p2)
+        return math.dist(p1, p2)
     
     def init_action_space(self) -> spaces.Box:
         """        
@@ -263,20 +263,20 @@ class SimpleKinematicEnv(gymnasium.Env):
     
     def map_normalized_action_to_real_action(self, action:np.ndarray) -> np.ndarray:
         
-        roll_cmd = self.norm_map_to_real(self.rl_control_constraints['roll_max'],
-                                     self.rl_control_constraints['roll_min'],
+        roll_cmd = self.norm_map_to_real(self.control_constraints['u_phi_max'],
+                                     self.control_constraints['u_phi_min'],
                                      action[0])
         
-        pitch_cmd = self.norm_map_to_real(self.rl_control_constraints['pitch_max'],
-                                      self.rl_control_constraints['pitch_min'],
+        pitch_cmd = self.norm_map_to_real(self.control_constraints['u_theta_max'],
+                                      self.control_constraints['u_theta_min'],
                                       action[1])
         
-        yaw_cmd = self.norm_map_to_real(self.rl_control_constraints['yaw_max'],
-                                    self.rl_control_constraints['yaw_min'],
+        yaw_cmd = self.norm_map_to_real(self.control_constraints['u_psi_max'],
+                                    self.control_constraints['u_psi_min'],
                                     action[2])
         
-        airspeed_cmd = self.norm_map_to_real(self.rl_control_constraints['airspeed_max'],
-                                            self.rl_control_constraints['airspeed_min'],
+        airspeed_cmd = self.norm_map_to_real(self.control_constraints['v_cmd_max'],
+                                            self.control_constraints['v_cmd_min'],
                                             action[3])
         
         return np.array([roll_cmd, pitch_cmd, yaw_cmd, airspeed_cmd])
@@ -308,20 +308,68 @@ class SimpleKinematicEnv(gymnasium.Env):
         """
         Get the reward and check if done
         """
-        done = False
         current_position = current_state[0:3]
-        distance_from_goal = self.compute_distance(current_position, self.goal_state)
+        #distance_from_goal = self.compute_distance(current_position, self.goal_state)
         time_step_penalty = -1
         
-        if distance_from_goal < self.distance_capture:
-            return 1000, done 
+        #compute normalized unit vector from current position to goal
+        los_angle = math.atan2(self.goal_state[1] - current_position[1],
+                                 self.goal_state[0] - current_position[0])
+        
+        ego_heading = current_state[5]
+        heading_diff = abs(los_angle - ego_heading)
+        distance_from_goal = self.compute_distance(current_position, self.goal_state)
+        altitude_diff = abs(self.goal_state[2] - current_position[2])
+
+        if current_position[0] < self.state_constraints['x_min']:
+            reward = -1E5
+            # print("Crashed! Too far left!", current_position)
+            done = True
+            return reward, done
+        elif current_position[0] > self.state_constraints['x_max']:
+            reward = -1E5
+            # print("Crashed! Too far right!", current_position)
+            done = True
+            return reward, done
+        
+        if current_position[1] < self.state_constraints['y_min']:
+            reward = -1E5
+            # print("Crashed! Too far back!", current_position)
+            done = True
+            return reward, done
+        elif current_position[1] > self.state_constraints['y_max']:
+            reward = -1E5
+            # print("Crashed! Too far forward!", current_position)
+            done = True
+            return reward, done
+
+        if current_position[2] < self.state_constraints['z_min']:
+            reward = -1E5
+            print("Crashed! Too low!", current_position)
+            done = True
+            return reward, done
+        
+        if current_position[2] > 80:#self.state_constraints['z_max']:
+            reward = -1E5
+            # print("Crashed! Too high!", current_position)
+            done = True
+            return reward, done
+        
+        if distance_from_goal <= self.distance_capture:
+            done = True
+            #print("Goal Reached!")
+            reward = 1E5
+            return reward, done 
         
         if self.time_limit <= 0:
-            reward = -1000
+            reward = time_step_penalty - (heading_diff) #- (altitude_diff)
             done = True
             return reward , done
         
-        reward = time_step_penalty + distance_from_goal
+        done = False
+        #we want to get closer to the goal 
+        reward = time_step_penalty - (heading_diff) - (altitude_diff)
+        self.old_distance_from_goal = distance_from_goal
         return reward, done 
     
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
@@ -337,7 +385,10 @@ class SimpleKinematicEnv(gymnasium.Env):
         
         self.norm_start_state = self.map_real_observation_to_normalized_observation(
             next_state)
-        self.start_state = next_state
+        self.norm_start_state = self.norm_start_state.astype(np.float32)
+        # self.start_state = next_state
+        #make sure its dtype is float32
+        self.start_state = next_state.astype(np.float32)
         
         observation = self.__get_observation()
         info = self.__get_info()
@@ -346,32 +397,47 @@ class SimpleKinematicEnv(gymnasium.Env):
             
         return observation, reward, done, False, info
         
-    def reset(self, seed:int=None) -> Any:
+    def reset(self, seed=None) -> Any:
         super().reset(seed=seed)
         
         #right now see if this works we will randomize the goal location later on
+        correct_spawn = False
         if self.use_random_start:
-            self.start_state = np.random.uniform(
-                low=[self.state_constraints['x_min'],
-                     self.state_constraints['y_min'],
-                     self.state_constraints['z_min'],
-                     self.state_constraints['phi_min'],
-                     self.state_constraints['theta_min'],
-                     self.state_constraints['psi_min'],
-                     self.state_constraints['airspeed_min']],
-                high=[self.state_constraints['x_max'],
-                      self.state_constraints['y_max'],
-                      self.state_constraints['z_max'],
-                      self.state_constraints['phi_max'],
-                      self.state_constraints['theta_max'],
-                      self.state_constraints['psi_max'],
-                      self.state_constraints['airspeed_max']])
+            while correct_spawn == False:
+                self.start_state = np.random.uniform(
+                    low=[self.state_constraints['x_min'],
+                        self.state_constraints['y_min'],
+                        self.state_constraints['z_min'],
+                        0,
+                        0,
+                        #  self.state_constraints['phi_min'],
+                        #  self.state_constraints['theta_min'],
+                        self.state_constraints['psi_min'],
+                        self.state_constraints['airspeed_min']],
+                    high=[self.state_constraints['x_max'],
+                        self.state_constraints['y_max'],
+                        self.state_constraints['z_max'],
+                        0,
+                        0,
+                        #   self.state_constraints['phi_max'],
+                        #   self.state_constraints['theta_max'],
+                        self.state_constraints['psi_max'],
+                        self.state_constraints['airspeed_max']])
+                distance_from_goal = self.compute_distance(self.start_state[0:3], 
+                                                           self.goal_state)
+                
+                if distance_from_goal > 50:
+                    correct_spawn = True
+                
+            self.start_state = self.start_state.astype(np.float32)
             
         else:
             self.start_state = self.original_start_state
+            self.start_state = self.start_state.astype(np.float32)
             
         self.norm_start_state = self.map_real_observation_to_normalized_observation(
             self.start_state)
+        self.norm_start_state = self.norm_start_state.astype(np.float32)
         
         self.time_limit = self.time_constant
         
@@ -381,7 +447,6 @@ class SimpleKinematicEnv(gymnasium.Env):
         #reupdate the history log 
         self.data_handler = DataHandler()
         self.data_handler.update_data(self.start_state)
-        
         return observation, info
     
     def render(self, mode='human') -> None:

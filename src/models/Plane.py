@@ -166,79 +166,79 @@ class Plane():
             return x + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
     
 
-plane_example = Plane()
-function = plane_example.set_state_space()
-start_states = [
-    0, 0, 0, #position 
-    0, 0, 0, 0 #attitude and velocity
-]
-u = [np.deg2rad(0), #roll control 
-     np.deg2rad(0), #pitch control
-     np.deg2rad(0), #yaw control, if 0 the plane will fly straight
-     15] #airspeed
+# plane_example = Plane()
+# function = plane_example.set_state_space()
+# start_states = [
+#     0, 0, 0, #position 
+#     0, 0, 0, 0 #attitude and velocity
+# ]
+# u = [np.deg2rad(0), #roll control 
+#      np.deg2rad(0), #pitch control
+#      np.deg2rad(0), #yaw control, if 0 the plane will fly straight
+#      15] #airspeed
 
-N = 1
-dt = plane_example.dt_val
+# N = 1
+# dt = plane_example.dt_val
 
-T_end = 25
-N = int(T_end/dt)
+# T_end = 25
+# N = int(T_end/dt)
 
-next_step = start_states
+# next_step = start_states
 
-history = {
-    'x':[],
-    'y':[],
-    'z':[],
-    'phi':[],
-    'theta':[],
-    'psi':[],
-    'v':[],
-    'time':[]
-}
+# history = {
+#     'x':[],
+#     'y':[],
+#     'z':[],
+#     'phi':[],
+#     'theta':[],
+#     'psi':[],
+#     'v':[],
+#     'time':[]
+# }
 
-airspeed_cmd_history = []
+# airspeed_cmd_history = []
 
-for i in range(N):
-    next_step = plane_example.rk45(next_step, u, dt)
+# for i in range(N):
+#     next_step = plane_example.rk45(next_step, u, dt)
     
-    if i <= N/2:
-        u = [np.deg2rad(0), #roll control 
-            np.deg2rad(0), #pitch control
-            np.deg2rad(0), #yaw control, if 0 the plane will fly straight
-            15] #airspeed
-    else:
-        u = [np.deg2rad(20), #roll control 
-            np.deg2rad(0), #pitch control
-            np.deg2rad(15), #yaw control, if 0 the plane will fly straight
-            15]
+#     if i <= N/2:
+#         u = [np.deg2rad(0), #roll control 
+#             np.deg2rad(0), #pitch control
+#             np.deg2rad(0), #yaw control, if 0 the plane will fly straight
+#             15] #airspeed
+#     else:
+#         u = [np.deg2rad(20), #roll control 
+#             np.deg2rad(0), #pitch control
+#             np.deg2rad(15), #yaw control, if 0 the plane will fly straight
+#             15]
         
-    airspeed_cmd_history.append(u[3])
-    history['x'].append(next_step[0])
-    history['y'].append(next_step[1])
-    history['z'].append(-next_step[2]) #flip this to make z go up 
-    history['phi'].append(np.rad2deg(next_step[3]))
-    history['theta'].append(np.rad2deg(next_step[4]))
-    history['psi'].append(np.rad2deg(next_step[5]))    
-    history['v'].append(next_step[6])
-    history['time'].append(i*dt)
+#     airspeed_cmd_history.append(u[3])
+#     history['x'].append(next_step[0])
+#     history['y'].append(next_step[1])
+#     history['z'].append(-next_step[2]) #flip this to make z go up 
+#     history['phi'].append(np.rad2deg(next_step[3]))
+#     history['theta'].append(np.rad2deg(next_step[4]))
+#     history['psi'].append(np.rad2deg(next_step[5]))    
+#     history['v'].append(next_step[6])
+#     history['time'].append(i*dt)
     
-## These are plots for sanity checks is all    
-import matplotlib.pyplot as plt
-# plot in 3D
-fig, ax = plt.subplots(1, 1, subplot_kw={'projection':'3d', 'aspect':'auto'})
-ax.plot(history['x'], history['y'], history['z'])
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
+# ## These are plots for sanity checks is all    
+# import matplotlib.pyplot as plt
+# # plot in 3D
+# fig, ax = plt.subplots(1, 1, subplot_kw={'projection':'3d', 'aspect':'auto'})
+# ax.plot(history['x'], history['y'], history['z'])
+# ax.set_xlabel('X')
+# ax.set_ylabel('Y')
+# ax.set_zlabel('Z')
 
-fig, ax = plt.subplots(4, 1, figsize=(10, 10))
-ax[0].plot(history['time'],history['phi'], label='phi')
-ax[1].plot(history['time'],history['theta'], label='theta')
-ax[2].plot(history['time'],history['psi'], label='psi')
-ax[3].plot(history['time'],history['v'], label='airspeed')  
-ax[3].plot(history['time'],airspeed_cmd_history, linestyle='-.',label='airspeed_cmd')
-for a in ax:
-    a.legend()
-    a.grid()
+# fig, ax = plt.subplots(4, 1, figsize=(10, 10))
+# ax[0].plot(history['time'],history['phi'], label='phi')
+# ax[1].plot(history['time'],history['theta'], label='theta')
+# ax[2].plot(history['time'],history['psi'], label='psi')
+# ax[3].plot(history['time'],history['v'], label='airspeed')  
+# ax[3].plot(history['time'],airspeed_cmd_history, linestyle='-.',label='airspeed_cmd')
+# for a in ax:
+#     a.legend()
+#     a.grid()
 
-plt.show()
+# plt.show()
