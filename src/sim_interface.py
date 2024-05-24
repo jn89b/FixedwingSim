@@ -208,41 +208,26 @@ class OpenGymInterface(CLSimInterface):
                     
     def set_commands_w_pursuers(self, action:np.ndarray,
                                 pursuer_list: list) -> None:
-        final_states = [
-            action[0],
-            action[1],
-            action[2],
-            0,
-            0,
-            0,
-            action[3]
-        ]
+        """_summary_
+
+        Args:
+            action (np.ndarray): commands are 
+            heading command, 
+            altitude command, 
+            airspeed command
+            pursuer_list (list): _description_
+        """
+        # final_states = [
+        #     action[0],
+        #     action[1],
+        #     action[2],
+        #     0,
+        #     0,
+        #     0,
+        #     action[3]
+        # ]
         #feed it to the mpc controller 
         init_states = self.get_observation()
-        # init_control = [
-        #     init_states[3],
-        #     init_states[4],
-        #     init_states[5],
-        #     init_states[6]
-        # ]
-        
-        # solution_results, end_time = self.mpc_controller.get_solution(
-        #     init_states, final_states, init_control)
-
-        # #set the commands
-        # idx_step = 1
-        # z_cmd = solution_results['z'][idx_step]
-        # roll_cmd = solution_results['phi'][idx_step]
-        # pitch_cmd = solution_results['theta'][idx_step]
-        # heading_cmd = solution_results['psi'][idx_step]
-        # airspeed_cmd = solution_results['v_cmd'][idx_step]
-                
-        # self.autopilot.pitch_hold(pitch_cmd)
-        #self.autopilot.roll_hold(roll_cmd)
-        # self.autopilot.heading_hold(np.rad2deg(heading_cmd)) 
-        # self.autopilot.altitude_hold(meters_to_feet(50))
-        # self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(airspeed_cmd))
-
         sim_hz = self.flight_dynamics_sim_hz
         control_hz = 50
         goal_location = np.array([action[0], action[1], action[2]])
@@ -254,30 +239,49 @@ class OpenGymInterface(CLSimInterface):
         #for i in range(sim_hz):
         for i in range(sampling_ratio):
             init_states = self.get_observation()
-            current_location = np.array([init_states[0], init_states[1], init_states[2]])
-            distance = np.linalg.norm(goal_location - current_location)
-            dy = final_states[1] - init_states[1]
-            dx = final_states[0] - init_states[0]
-            arctan_cmd = np.arctan2(dy, dx)
-            heading_cmd = self.cartesian_to_navigation_radians(arctan_cmd)
-            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
-            self.autopilot.altitude_hold(meters_to_feet(action[2]))
-            self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(action[3]))
+            # current_location = np.array([init_states[0], init_states[1], init_states[2]])
+            # distance = np.linalg.norm(goal_location - current_location)
+            # dy = final_states[1] - init_states[1]
+            # dx = final_states[0] - init_states[0]
+            # arctan_cmd = np.arctan2(dy, dx)
+            # heading_cmd = self.cartesian_to_navigation_radians(arctan_cmd)
+            # self.autopilot.heading_hold(np.rad2deg(heading_cmd))
+            # self.autopilot.altitude_hold(meters_to_feet(action[2]))
+            # self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(action[3]))
             
-            if distance <= distance_tolerance:
-                return 
+            heading_cmd = self.cartesian_to_navigation_radians(action[0])
+            self.autopilot.heading_hold(np.rad2deg(heading_cmd))
+            self.autopilot.altitude_hold(meters_to_feet(action[1]))
+            self.autopilot.airspeed_hold_w_throttle(mps_to_ktas(action[2]))
+            
+            self.run_backend()
+            evader_observation = self.get_observation()
+
+            for pursuer in pursuer_list:
+                turn_cmd, v_cmd = pursuer.pursuit_nav(evader_observation)    
+                pursuer_height = pursuer.get_observation()[2]
+                dz = evader_observation[2] - pursuer_height
+                
+                # for j in range(sampling_ratio):                
+                pursuer.set_command(turn_cmd, 
+                                    v_cmd, 
+                                    pursuer_height+dz)
+
+        
+            # if distance <= distance_tolerance:
+            #     return 
             # elif i % control_hz == 0 and i != 0:
             #     return
-            else:
-                self.run_backend()
-                evader_observation = self.get_observation()
-                for pursuer in pursuer_list:
-                    pursuer_height = pursuer.get_observation()[2]
-                    turn_cmd, v_cmd = pursuer.pursuit_nav(evader_observation)
-                    dz = evader_observation[2] - pursuer_height
-                    pursuer.set_command(turn_cmd, 
-                                        v_cmd, 
-                                        pursuer_height+dz)
+            # else:
+            #     self.run_backend()
+            #     evader_observation = self.get_observation()
+            #     for pursuer in pursuer_list:
+            #         pursuer_height = pursuer.get_observation()[2]
+            #         turn_cmd, v_cmd = pursuer.pursuit_nav(evader_observation)
+            #         dz = evader_observation[2] - pursuer_height
+            #         pursuer.set_command(turn_cmd, 
+            #                             v_cmd, 
+            #                             pursuer_height+dz)
 
     def get_info(self) -> dict:
         return self.sim.get_states()

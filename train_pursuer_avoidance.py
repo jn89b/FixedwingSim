@@ -10,7 +10,7 @@ from src.conversions import meters_to_feet, mps_to_ktas
 
 from stable_baselines3.common.callbacks import CheckpointCallback
 
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, A2C
 from stable_baselines3 import DDPG
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
@@ -25,13 +25,21 @@ class DataHandler():
         self.x = []
         self.y = []
         self.z = []
+        self.roll = []
+        self.pitch = []
+        self.yaw = []
+        self.u = []
         
     def update_data(self,info_array:np.ndarray):
         self.x.append(info_array[0])
         self.y.append(info_array[1])
         self.z.append(info_array[2])
-    
-    
+        self.roll.append(info_array[3])
+        self.pitch.append(info_array[4])
+        self.yaw.append(info_array[5])
+        self.u.append(info_array[6])
+        
+
 def init_mpc_controller(mpc_control_constraints:dict,
                         state_constraints:dict,
                         mpc_params:dict, 
@@ -46,9 +54,10 @@ def init_mpc_controller(mpc_control_constraints:dict,
     return plane_mpc
 
 
-LOAD_MODEL = True
+LOAD_MODEL = False
 TOTAL_TIMESTEPS = 1250000#100000/2 #
-CONTINUE_TRAINING = True
+CONTINUE_TRAINING = False
+COMPARE_MODELS = False
 
 init_state_dict = {
     "ic/u-fps": meters_to_feet(25),
@@ -80,8 +89,10 @@ rl_control_constraints = {
     'x_max': 30,
     'y_min': -30,
     'y_max': 30,
-    'z_min': -30,
-    'z_max': 30,
+    'z_min': 30,
+    'z_max': 100,
+    'heading_cmd_min': 0,
+    'heading_cmd_max': 2*np.pi,
     'v_cmd_min': 15,
     'v_cmd_max': 30,
 }
@@ -98,16 +109,16 @@ control_constraints = {
 }
 
 state_constraints = {
-    'x_min': -500, #-np.inf,
-    'x_max': 500, #np.inf,
-    'y_min': -500, #-np.inf,
-    'y_max': 500, #np.inf,
+    'x_min': -1000, #-np.inf,
+    'x_max': 1000, #np.inf,
+    'y_min': -1000, #-np.inf,
+    'y_max': 1000, #np.inf,
     'z_min': 30,
     'z_max': 100,
     'phi_min':  -np.deg2rad(45),
     'phi_max':   np.deg2rad(45),
-    'theta_min':-np.deg2rad(15),
-    'theta_max': np.deg2rad(15),
+    'theta_min':-np.deg2rad(20),
+    'theta_max': np.deg2rad(20),
     'psi_min':  -np.pi,
     'psi_max':   np.pi,
     'airspeed_min': 15,
@@ -157,14 +168,27 @@ z_ref = []
 distance_history = []
 
 # Save a checkpoint every 1000 steps
-model_name ="pursuer_avoidance"
-# model_name = "early_pursuer"
+# model_name ="pursuer_avoidance"
+# model_name = "dumb_single_avoidance"
+model_name = "two_pursuer_avoidance"
 checkpoint_callback = CheckpointCallback(save_freq=10000, 
                                         save_path='./models/'+model_name+'_4/',
                                         name_prefix=model_name)
+check_env(env)
+
+n_steps = 550 * 4
+n_epochs = 10
+batch_size = 100
 
 if LOAD_MODEL and not CONTINUE_TRAINING:
-    model = PPO.load(model_name)
+    model = PPO.load(model_name)    
+    model.set_env(env)
+    
+    if COMPARE_MODELS:
+        dumb_model = PPO.load(dumb_model_name)
+        dumb_model.set_env(env)
+        print("dumb model loaded")
+    
     print("model loaded")
 elif LOAD_MODEL and CONTINUE_TRAINING:
     model = PPO.load(model_name)
@@ -179,12 +203,9 @@ else:
     # check_env(env)
     model = PPO("MultiInputPolicy", 
                 env,
-                learning_rate=0.0001,
-                gamma=0.99,
-                # clip_range=0.2,
-                n_epochs=10,
-                # ent_coef=0.001,
-                seed=42, 
+                n_epochs=n_epochs,
+                ent_coef=0.001,
+                seed=1, 
                 verbose=1, tensorboard_log='tensorboard_logs/', 
                 device='cuda')
     model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4, 
@@ -203,8 +224,6 @@ else:
 # model.save("simple_high_level")
 # print("model saved")
 
-N = 300
-
 ego_data = DataHandler()
 pursuer_datas = []
 for i, pursuer in enumerate(env.pursuers):
@@ -213,23 +232,34 @@ for i, pursuer in enumerate(env.pursuers):
 
 reward_history = []
 
-for i in range(N):
-    done = False
-    # while not done:
-    action = env.action_space.sample()
+N = 500
+done = False
+
+for i in range(4):
+    obs, info = env.reset(seed=3)
+
+# for i in range(N):
+counter = 0 
+while done == False:   
+    action, _states = model.predict(obs)
     obs, reward, done, _, info = env.step(action)
     reward_history.append(reward)
-    env.render()
-    ego_data.update_data(obs['ego'])
-    
+    #env.render()
+    ego_data.update_data(obs['actual_ego'])
+    counter += 1
     for p,k in zip(pursuer_datas,info.keys()):
         p.update_data(info[k])
+    
     if done == True:
         print("done")
+        obs, info = env.reset()
         break
+
+    
         
 #%% 
 #get time
+print("counter is: ", counter)
 print("sim time is: ", env.backend_interface.sim.get_time())
 print("sim frequency is: ", env.backend_interface.flight_dynamics_sim_hz)
 for i, pursuer in enumerate(env.pursuers):
@@ -254,4 +284,15 @@ ax.legend()
 
 fig = plt.figure()
 plt.plot(reward_history)
+
+
+#plot roll, pitch, yaw in degrees 
+fig, ax = plt.subplots(4,1)
+ax[0].plot(np.rad2deg(ego_data.roll), label='phi')
+ax[1].plot(np.rad2deg(ego_data.pitch), label='theta')
+ax[2].plot(np.rad2deg(ego_data.yaw), label='psi')
+ax[3].plot(ego_data.u, label='airspeed')
+for a in ax:
+    a.legend()
+    
 plt.show()

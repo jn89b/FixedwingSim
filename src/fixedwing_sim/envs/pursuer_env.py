@@ -45,7 +45,7 @@ class PursuerEnv(gymnasium.Env):
                  mpc_control_constraints:dict=None,
                  state_constraints:dict=None,
                  num_pursuers:int=3,
-                 start_distance_from_ego:float=75,
+                 start_distance_from_ego:float=50,
                  distance_capture:float=10,
                  pursuer_velocities:np.ndarray=np.ndarray([15, 30]),
                  render_mode:str=None,
@@ -73,13 +73,14 @@ class PursuerEnv(gymnasium.Env):
         
         self.observation_space = spaces.Dict(
             {
-                "ego": self.ego_obs_space
+                "ego": self.ego_obs_space,
+                "actual_ego": self.actual_ego_observation()
             }
         )
         
         self.use_random_start = use_random_start        
         self.distance_tolerance = 15
-        self.time_step_constant = 500 #number of steps
+        self.time_step_constant = 550    #number of steps
         #need to figure out the relationship between time and steps 
         self.time_limit = self.time_step_constant 
         self.init_counter = 0
@@ -97,6 +98,7 @@ class PursuerEnv(gymnasium.Env):
         init_count = 0
         ego_obs = self.backend_interface.get_observation()
         ego_pos = ego_obs[:3]
+        ego_heading = ego_obs[5]
 
         while init_count < num_pursuers:
             rand_x = np.random.uniform(ego_pos[0]-self.start_distance_from_ego, 
@@ -115,7 +117,7 @@ class PursuerEnv(gymnasium.Env):
             
             random_heading = ego_obs[5]
             pursuer_init_conditions = {
-                "ic/u-fps": mps_to_ktas(pursuer_vel),
+                "ic/u-fps": meters_to_feet(pursuer_vel),
                 "ic/v-fps": 0.0,
                 "ic/w-fps": 0.0,
                 "ic/p-rad_sec": 0.0,
@@ -200,7 +202,8 @@ class PursuerEnv(gymnasium.Env):
         
         return action_space
     
-    def init_ego_observation(self) -> spaces.Dict:
+    
+    def actual_ego_observation(self) -> spaces.Dict:
         """
         State orders are as follows:
         x, (east) (m)
@@ -235,12 +238,63 @@ class PursuerEnv(gymnasium.Env):
         high_obs.append(self.state_constraints['airspeed_max'])
         low_obs.append(self.state_constraints['airspeed_min'])
         
+        num_pursuer_obs = 2
+        for n in range(num_pursuer_obs):
+            for i in range(self.num_pursuers):
+                low_obs.append(-np.inf)
+                high_obs.append(np.inf)
+        
+        obs_space = spaces.Box(low=np.array(low_obs),
+                                            high=np.array(high_obs),
+                                            dtype=np.float32)
+            
+        return obs_space
+    
+    def init_ego_observation(self) -> spaces.Dict:
+        """
+        State orders are as follows:
+        x, (east) (m)
+        y, (north) (m)
+        z, (up) (m)
+        roll, (rad)
+        pitch, (rad)
+        yaw, (rad)
+        airspeed (m/s)
+        """
+        high_obs = [1, 1, 1, 1, 1, 1, 1]
+        low_obs = [-1, -1, -1, -1, -1, -1, -1]
+        
+        # high_obs.append(self.state_constraints['x_max'])
+        # low_obs.append(self.state_constraints['x_min'])
+        
+        # high_obs.append(self.state_constraints['y_max'])
+        # low_obs.append(self.state_constraints['y_min'])
+        
+        # high_obs.append(self.state_constraints['z_max'])
+        # low_obs.append(self.state_constraints['z_min'])
+        
+        # high_obs.append(self.state_constraints['phi_max'])
+        # low_obs.append(self.state_constraints['phi_min'])
+        
+        # high_obs.append(self.state_constraints['theta_max'])
+        # low_obs.append(self.state_constraints['theta_min'])
+        
+        # high_obs.append(self.state_constraints['psi_max'])
+        # low_obs.append(self.state_constraints['psi_min'])
+        
+        # high_obs.append(self.state_constraints['airspeed_max'])
+        # low_obs.append(self.state_constraints['airspeed_min'])
+        
         #add pursuers to the observation space this will be 
         #the distance to the pursuers
-        for i in range(self.num_pursuers):
-            low_obs.append(-np.inf)
-            high_obs.append(np.inf)
-        
+        num_pursuer_obs = 2
+        for n in range(num_pursuer_obs):
+            for i in range(self.num_pursuers):
+                #low_obs.append(-np.inf)
+                #high_obs.append(np.inf)
+                low_obs.append(-1)
+                high_obs.append(1)
+            
         obs_space = spaces.Box(low=np.array(low_obs),
                                             high=np.array(high_obs),
                                             dtype=np.float32)
@@ -253,44 +307,164 @@ class PursuerEnv(gymnasium.Env):
     def norm_map_to_real(self, norm_max:float, norm_min:float, norm_val:float) -> float:
         return norm_min + (norm_max - norm_min) * (norm_val + 1) / 2
     
+    def map_normalized_observation_to_real_observation(self, observation:np.ndarray) -> np.ndarray:
+        """
+        observations are normalized to [-1, 1] and must be mapped to the
+        constraints of the aircraft
+        """
+        x_norm = observation[0]
+        y_norm = observation[1]
+        z_norm = observation[2]
+        roll_norm = observation[3]
+        pitch_norm = observation[4]
+        yaw_norm = observation[5]
+        v_norm = observation[6]
+        
+        x = self.norm_map_to_real(self.state_constraints['x_max'],
+                                  self.state_constraints['x_min'],
+                                  x_norm)
+        
+        y = self.norm_map_to_real(self.state_constraints['y_max'],
+                                  self.state_constraints['y_min'],
+                                  y_norm)
+        
+        z = self.norm_map_to_real(self.state_constraints['z_max'],
+                                  self.state_constraints['z_min'],
+                                  z_norm)
+        
+        roll = self.norm_map_to_real(self.state_constraints['phi_max'],
+                                     self.state_constraints['phi_min'],
+                                     roll_norm)
+        
+        pitch = self.norm_map_to_real(self.state_constraints['theta_max'],
+                                      self.state_constraints['theta_min'],
+                                      pitch_norm)
+        
+        yaw = self.norm_map_to_real(self.state_constraints['psi_max'],
+                                    self.state_constraints['psi_min'],
+                                    yaw_norm)
+        
+        v = self.norm_map_to_real(self.state_constraints['airspeed_max'],
+                                  self.state_constraints['airspeed_min'],
+                                  v_norm)
+        
+        return np.array([x, y, z, roll, pitch, yaw, v])
+    
+    def map_real_observation_to_normalized_observation(self, observation:np.ndarray) -> np.ndarray:
+        """
+        observations are normalized to [-1, 1] and must be mapped to the
+        constraints of the aircraft
+        """
+        x = observation[0]
+        y = observation[1]
+        z = observation[2]
+        roll = observation[3]
+        pitch = observation[4]
+        yaw = observation[5]
+        v = observation[6]
+        
+        x_norm = self.map_real_to_norm(self.state_constraints['x_max'],
+                                       self.state_constraints['x_min'],
+                                       x)
+        
+        y_norm = self.map_real_to_norm(self.state_constraints['y_max'],
+                                       self.state_constraints['y_min'],
+                                       y)
+        
+        z_norm = self.map_real_to_norm(self.state_constraints['z_max'],
+                                       self.state_constraints['z_min'],
+                                       z)
+        
+        roll_norm = self.map_real_to_norm(self.state_constraints['phi_max'],
+                                          self.state_constraints['phi_min'],
+                                          roll)
+        
+        pitch_norm = self.map_real_to_norm(self.state_constraints['theta_max'],
+                                           self.state_constraints['theta_min'],
+                                           pitch)
+        
+        yaw_norm = self.map_real_to_norm(self.state_constraints['psi_max'],
+                                         self.state_constraints['psi_min'],
+                                         yaw)
+        
+        v_norm = self.map_real_to_norm(self.state_constraints['airspeed_max'],
+                                       self.state_constraints['airspeed_min'],
+                                       v)
+        
+        return np.array([x_norm, y_norm, z_norm, roll_norm, pitch_norm, yaw_norm, v_norm])
+    
     def map_normalized_action_to_real_action(self, action:np.ndarray) -> np.ndarray:
         """
         actions are normalized to [-1, 1] and must be mapped to the
         constraints of the aircraft
         Action order: roll, pitch, yaw, throttle
+        
+        Let's change this to heading command, z cmd, and airspeed
+        
         """
-        x_norm = action[0]
-        y_norm = action[1]
-        z_norm = action[2]
-        v_norm = action[3]
+        # x_norm = action[0]
+        # y_norm = action[1]
+        # z_norm = action[2]
+        # v_norm = action[3]
         
-        x_cmd = self.norm_map_to_real(self.rl_control_constraints['x_max'],
-                                            self.rl_control_constraints['x_min'],
-                                            x_norm)
+        # x_cmd = self.norm_map_to_real(self.rl_control_constraints['x_max'],
+        #                                     self.rl_control_constraints['x_min'],
+        #                                     x_norm)
         
-        y_cmd = self.norm_map_to_real(self.rl_control_constraints['y_max'],
-                                            self.rl_control_constraints['y_min'],
-                                            y_norm)
+        # y_cmd = self.norm_map_to_real(self.rl_control_constraints['y_max'],
+        #                                     self.rl_control_constraints['y_min'],
+        #                                     y_norm)
         
-        z_cmd = self.norm_map_to_real(self.rl_control_constraints['z_max'],  
-                                            self.rl_control_constraints['z_min'],
-                                            z_norm)
+        # z_cmd = self.norm_map_to_real(self.rl_control_constraints['z_max'],  
+        #                                     self.rl_control_constraints['z_min'],
+        #                                     z_norm)
         
-        v_cmd = self.norm_map_to_real(self.rl_control_constraints['v_cmd_min'],
-                                      self.rl_control_constraints['v_cmd_max'],
-                                      v_norm)
+        # v_cmd = self.norm_map_to_real(self.rl_control_constraints['v_cmd_min'],
+        #                               self.rl_control_constraints['v_cmd_max'],
+        #                               v_norm)
         
-        return np.array([x_cmd, y_cmd, z_cmd, v_cmd])
+        heading_cmd = self.norm_map_to_real(self.rl_control_constraints['heading_cmd_max'],
+                                            self.rl_control_constraints['heading_cmd_min'],
+                                            action[0])
+        
+        z_cmd = self.norm_map_to_real(self.rl_control_constraints['z_max'],
+                                      self.rl_control_constraints['z_min'],
+                                      action[1])
+        
+        v_cmd = self.norm_map_to_real(self.rl_control_constraints['v_cmd_max'],
+                                      self.rl_control_constraints['v_cmd_min'],
+                                      action[2])        
+        
+        return np.array([heading_cmd, z_cmd, v_cmd])
         
     def __get_observation(self) -> dict:
         ego_obs = self.backend_interface.get_observation()
+        norm_ego_obs = self.map_real_observation_to_normalized_observation(ego_obs)
         #update observation space with pursuer distance
         for pursuer in self.pursuers:
-            pursuer_pos = pursuer.get_observation()[:3]
-            distance = self.compute_distance(ego_obs[:3], pursuer_pos)
-            ego_obs = np.append(ego_obs, distance)
+            pursuer_obs = pursuer.get_observation()
+            norm_pursuer_obs = self.map_real_observation_to_normalized_observation(pursuer_obs)
+            norm_pursuer_pos = norm_pursuer_obs[:3]
+            
+            norm_distance = self.compute_distance(norm_ego_obs[:3], norm_pursuer_pos)
+            norm_ego_obs = np.append(norm_ego_obs, norm_distance)
+            
+            pursuer_heading = norm_pursuer_obs[5]  
+            heading_diff = abs(norm_ego_obs[5] - pursuer_heading)
+            
+            norm_ego_obs = np.append(norm_ego_obs, heading_diff)
+            
+            
+            ego_obs = np.append(ego_obs, norm_distance)
+            ego_obs = np.append(ego_obs, heading_diff)
+            
         
-        obs = {"ego": ego_obs}    
+        #make sure array is type float32
+        norm_ego_obs = np.array(norm_ego_obs, dtype=np.float32)
+        ego_obs = np.array(ego_obs, dtype=np.float32)
+            
+        obs = {"ego": norm_ego_obs,
+               "actual_ego": ego_obs}    
         
         return obs
     
@@ -310,42 +484,81 @@ class PursuerEnv(gymnasium.Env):
         reward = 0          
         ego_obs = self.__get_observation()
         ego_pos = ego_obs['ego'][:3]
-        
+        ego_actual_pos = ego_obs['actual_ego'][:3]
         #check time limit
         if self.time_limit <= 0:
-            reward += 100
+            reward += 1000
             # print("Time limit reached you survived!")
             return reward, True
 
-        if ego_pos[2] < self.state_constraints['z_min']:
-            reward += -1E6
-            print("Crashed into the ground")
+        if ego_pos[2] < -1:
+            #print("crashed into ground")
+            reward += -100
             return reward, True
         
-        if ego_pos[2] > self.state_constraints['z_max']:
-            reward += -1E6
-            print("Flew too high sky")
+        if ego_pos[2] > 1:
+            #print("Flew too high sky")
+            reward += -100
             return reward, True
+            #print("Flew too high sky")
+
+        # if ego_pos[2] < self.state_constraints['z_min']:
+        #     reward += -1E3
+        #     print("Crashed into the ground")
+        #     return reward, True
+        
+        # if ego_pos[2] > self.state_constraints['z_max']:
+        #     reward += -1E3
+        #     print("Flew too high sky")
+        #     return reward, True
 
         caught = False
-        #this is redundant but I will keep it for now
+        # this is redundant but I will keep it for now
+        # should put this as an average reward based on the number of pursuers
         for i, pursuer in enumerate(self.pursuers):
+            # pursuer_obs = pursuer.get_observation()
+            # pursuer_pos = pursuer_obs[:3]
+            # old_distance = self.distance_history[i]    
+            # distance = self.compute_distance(ego_pos, pursuer_pos)
+            # heading_error = abs(ego_obs['ego'][5] - pursuer_obs[5])             
+            # dz = ego_pos[2] - pursuer_pos[2]
             pursuer_obs = pursuer.get_observation()
-            pursuer_pos = pursuer_obs[:3]
-            old_distance = self.distance_history[i]    
-            distance = self.compute_distance(ego_pos, pursuer_pos)
+            norm_pursuer_obs = pursuer_obs#self.map_real_observation_to_normalized_observation(pursuer_obs)
+            norm_pursuer_pos = norm_pursuer_obs[:3]
+            old_distance = self.distance_history[i]
+            distance = self.compute_distance(ego_actual_pos, norm_pursuer_pos)
             
+            #normalize distance to old distance
+            distance_cost = distance - old_distance 
+            
+            #normalize ratio of distance to old distance
+            # heading_error = abs(ego_obs['actual_ego'][5] - norm_pursuer_obs[5])
+            #negative because we want to reward being as far away from pursuers
+            #get 2d unit vectors
+            ego_unit_vector = ego_obs['ego'][:2] / np.linalg.norm(ego_obs['ego'][:2])
+            pursuer_unit_vector = norm_pursuer_obs[:2] / np.linalg.norm(norm_pursuer_obs[:2])
+            dot_product = - np.dot(ego_unit_vector, pursuer_unit_vector)/2
+        
+            #print("Distance: ", distance)
             #we want to be as far away from the pursuers as possible
-            if distance < old_distance:
-                reward += distance - old_distance
+            if distance_cost < 0:
+                reward += -1 + dot_product
+                # reward += distance_cost  
+                # reward += dot_product  + (1*0.001)
             elif distance <= self.distance_tolerance:
-                reward += distance - old_distance
+                #reward += distance - old_distance
+                # reward += self.time_step_constant - self.time_limit  
+                reward += -100 
+                print("Caught by pursuer")
                 caught = True
             else:
-                reward += distance - old_distance
-                
+                reward += 1 + dot_product
+                # reward += dot_product + (1*0.001)        
             self.distance_history[i] = distance
-                
+        
+        # get the average reward
+        reward = (reward / self.num_pursuers) + (1*0.1)
+        
         if caught:
             return reward, True
         else:
@@ -356,7 +569,7 @@ class PursuerEnv(gymnasium.Env):
         Note action input is normalized to [-1, 1] and must be mapped to the
         constraints of the aircraft
         """
-        reward = 0
+        # reward = 0
         done = False
         real_action = self.map_normalized_action_to_real_action(action)
         observation = self.__get_observation()
@@ -366,35 +579,41 @@ class PursuerEnv(gymnasium.Env):
         self.init_counter += 1
 
         #check if the action is feasible 
-        proj_x = observation['ego'][0] + real_action[0]
-        proj_y = observation['ego'][1] + real_action[1]
-        proj_z = observation['ego'][2] + real_action[2]
-        proj_psi = np.arctan2(proj_y, proj_x)
-        dz = proj_z - observation['ego'][2]
-        dx = proj_x - observation['ego'][0]
-        dy = proj_y - observation['ego'][1]
-        proj_theta = np.arctan2(dz, np.sqrt(dx**2 + dy**2))
-        delta_psi = abs(proj_psi - observation['ego'][5])
+        # proj_x = observation['ego'][0] + real_action[0]
+        # proj_y = observation['ego'][1] + real_action[1]
+        # proj_z = observation['ego'][2] + real_action[2]
+        # proj_psi = np.arctan2(proj_y, proj_x)
+        # dz = proj_z - observation['ego'][2]
+        # dx = proj_x - observation['ego'][0]
+        # dy = proj_y - observation['ego'][1]
+        # proj_theta = np.arctan2(dz, np.sqrt(dx**2 + dy**2))
+        # delta_psi = abs(proj_psi - observation['ego'][5])
         
         #Wrap delta psi
-        if delta_psi > np.pi:
-            delta_psi = 2 * np.pi - delta_psi
-        elif delta_psi < -np.pi:
-            delta_psi = 2 * np.pi + delta_psi
+        # if delta_psi > np.pi:
+        #     delta_psi = 2 * np.pi - delta_psi
+        # elif delta_psi < -np.pi:
+        #     delta_psi = 2 * np.pi + delta_psi
 
-        self.action_history.append((proj_x, proj_y, proj_z))
-        position_action = np.array([proj_x, proj_y, proj_z, real_action[3]])
+        #self.action_history.append((proj_x, proj_y, proj_z))
+        # position_action = np.array([proj_x, proj_y, proj_z, real_action[3]])
         #self.backend_interface.set_commands(position_action)
-        self.backend_interface.set_commands_w_pursuers(position_action, 
-                                                       self.pursuers)
+        
+        # self.backend_interface.set_commands_w_pursuers(position_action, 
+        #                                                self.pursuers)
+        # real_action[1] = proj_z 
+        self.backend_interface.set_commands_w_pursuers(real_action,
+                                                         self.pursuers)
 
         step_reward,done = self.get_reward()
-        reward   += step_reward #+ time_penalty
+        time_step_reward = 1
+        reward   = step_reward #+ time_step_reward 
         
         #check if max episode steps reached
         return observation, reward, done, False, info
     
     def reset(self, seed=None) -> Any:
+        super().reset(seed=seed)
         
         #if seed is not None or self.use_random_start:
         if self.use_random_start:
@@ -417,14 +636,19 @@ class PursuerEnv(gymnasium.Env):
             elif random_heading <= -np.pi:
                 print("Wrap heading")
                 random_heading += 2*np.pi
+                
+            random_heading = np.rad2deg(random_heading)
                     
             random_roll = np.random.uniform(
                 self.state_constraints['phi_min'],
                 self.state_constraints['phi_max'])
             
-            random_pitch = np.random.uniform(
-                self.state_constraints['theta_min'],
-                self.state_constraints['theta_max'])
+            random_roll = 0.0 
+            # random_pitch = np.random.uniform(
+            #     self.state_constraints['theta_min'],
+            #     self.state_constraints['theta_max'])
+            
+            random_pitch = 0.0
             
             random_x = np.random.uniform(-100, 100)
             random_y = np.random.uniform(-100, 100)
@@ -435,7 +659,7 @@ class PursuerEnv(gymnasium.Env):
             random_lon_dg = geo_location[0]
             # random_alt_ft = geo_location[2]
             init_state_dict = {
-                "ic/u-fps": mps_to_ktas(random_vel),
+                "ic/u-fps": meters_to_feet(random_vel),
                 "ic/v-fps": 0.0,
                 "ic/w-fps": 0.0,
                 "ic/p-rad_sec": 0.0,
@@ -445,8 +669,8 @@ class PursuerEnv(gymnasium.Env):
                 "ic/long-gc-deg": random_lon_dg,
                 "ic/lat-gc-deg": random_lat_dg,
                 "ic/psi-true-deg": random_heading,
-                "ic/theta-deg": random_pitch,
-                "ic/phi-deg": random_roll,
+                "ic/theta-deg": np.rad2deg(random_pitch),
+                "ic/phi-deg": np.rad2deg(random_roll),
                 "ic/alpha-deg": 0.0,
                 "ic/beta-deg": 0.0,
                 "ic/num_engines": 1,
