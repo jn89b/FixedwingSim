@@ -13,9 +13,13 @@ class ToyCar():
      [v, psi_rate]
     
     """
-    def __init__(self):
+    def __init__(self,
+                 dt_val:float=0.05,
+                 psi_tau:float=0.05) -> None:
         self.define_states()
         self.define_controls()
+        self.dt_val = dt_val
+        self.psi_tau = psi_tau
         
     def define_states(self) -> None:
         self.x = ca.SX.sym('x')
@@ -45,7 +49,10 @@ class ToyCar():
         #this is where I do the dynamics for state space
         self.x_dot = self.v_cmd * ca.cos(self.psi)
         self.y_dot = self.v_cmd * ca.sin(self.psi)
-        self.psi_dot = self.psi_cmd
+        #self.psi_dot = self.psi_cmd 
+        
+        self.psi_dot = (self.psi_cmd - self.psi) * \
+            self.dt_val/self.psi_tau
         
         self.z_dot = ca.vertcat(
             self.x_dot, self.y_dot, self.psi_dot    
@@ -72,6 +79,11 @@ class ToyCar():
         
         next_step = x + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
         
+        if next_step[2] > np.pi:
+            next_step[2] -= 2*np.pi
+        elif next_step[2] < -np.pi:
+            next_step[2] += 2*np.pi
+                    
         #return as numpy row vector
         if use_numeric:
             next_step = np.array(next_step).flatten()

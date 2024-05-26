@@ -315,60 +315,67 @@ class SimpleKinematicEnv(gymnasium.Env):
         #compute normalized unit vector from current position to goal
         los_angle = math.atan2(self.goal_state[1] - current_position[1],
                                  self.goal_state[0] - current_position[0])
+        los_unit_vector = np.array([math.cos(los_angle), 
+                                    math.sin(los_angle)])
         
         ego_heading = current_state[5]
+        ego_unit_vector = np.array([math.cos(ego_heading), 
+                                    math.sin(ego_heading)])
+        
+        dot_product = np.dot(los_unit_vector, ego_unit_vector)
+        
         heading_diff = abs(los_angle - ego_heading)
         distance_from_goal = self.compute_distance(current_position, self.goal_state)
         altitude_diff = abs(self.goal_state[2] - current_position[2])
 
         if current_position[0] < self.state_constraints['x_min']:
-            reward = -1E5
-            # print("Crashed! Too far left!", current_position)
+            reward = -10
             done = True
+            # print("Crashed! Too far left!", current_position)
             return reward, done
         elif current_position[0] > self.state_constraints['x_max']:
-            reward = -1E5
-            # print("Crashed! Too far right!", current_position)
+            reward = -10
             done = True
+            # print("Crashed! Too far right!", current_position)
             return reward, done
         
         if current_position[1] < self.state_constraints['y_min']:
-            reward = -1E5
-            # print("Crashed! Too far back!", current_position)
+            reward = -10
             done = True
+            # print("Crashed! Too far back!", current_position)
             return reward, done
         elif current_position[1] > self.state_constraints['y_max']:
-            reward = -1E5
-            # print("Crashed! Too far forward!", current_position)
+            reward = -10
             done = True
+            # print("Crashed! Too far forward!", current_position)
             return reward, done
 
         if current_position[2] < self.state_constraints['z_min']:
-            reward = -1E5
-            print("Crashed! Too low!", current_position)
+            reward = -10
             done = True
+            #print("Crashed! Too low!", current_position)
             return reward, done
         
-        if current_position[2] > 80:#self.state_constraints['z_max']:
-            reward = -1E5
-            # print("Crashed! Too high!", current_position)
+        if current_position[2] > self.state_constraints['z_max']:
+            reward = -10
             done = True
+            # print("Crashed! Too high!", current_position)
             return reward, done
         
         if distance_from_goal <= self.distance_capture:
+            print("Goal Reached!")
             done = True
-            #print("Goal Reached!")
-            reward = 1E5
+            reward = 1000
             return reward, done 
         
         if self.time_limit <= 0:
-            reward = time_step_penalty - (heading_diff) #- (altitude_diff)
+            reward = time_step_penalty - (distance_from_goal) #- (altitude_diff)
             done = True
             return reward , done
         
         done = False
         #we want to get closer to the goal 
-        reward = time_step_penalty - (heading_diff) - (altitude_diff)
+        reward = dot_product #time_step_penalty - (distance_from_goal)
         self.old_distance_from_goal = distance_from_goal
         return reward, done 
     
@@ -389,9 +396,10 @@ class SimpleKinematicEnv(gymnasium.Env):
         # self.start_state = next_state
         #make sure its dtype is float32
         self.start_state = next_state.astype(np.float32)
-        
         observation = self.__get_observation()
         info = self.__get_info()
+        
+        self.time_limit -= 1
         
         self.data_handler.update_data(self.start_state) 
             
@@ -404,30 +412,57 @@ class SimpleKinematicEnv(gymnasium.Env):
         correct_spawn = False
         if self.use_random_start:
             while correct_spawn == False:
-                self.start_state = np.random.uniform(
+                self.goal_state = np.random.uniform(
                     low=[self.state_constraints['x_min'],
                         self.state_constraints['y_min'],
-                        self.state_constraints['z_min'],
-                        0,
-                        0,
-                        #  self.state_constraints['phi_min'],
-                        #  self.state_constraints['theta_min'],
-                        self.state_constraints['psi_min'],
-                        self.state_constraints['airspeed_min']],
+                        self.state_constraints['z_min']],
                     high=[self.state_constraints['x_max'],
                         self.state_constraints['y_max'],
-                        self.state_constraints['z_max'],
-                        0,
-                        0,
-                        #   self.state_constraints['phi_max'],
-                        #   self.state_constraints['theta_max'],
-                        self.state_constraints['psi_max'],
-                        self.state_constraints['airspeed_max']])
-                distance_from_goal = self.compute_distance(self.start_state[0:3], 
-                                                           self.goal_state)
+                        self.state_constraints['z_max']])
+                
+                self.start_state = self.original_start_state
+                
+                #randomize the heading of the aircraft
+                self.start_state[5] = np.random.uniform(
+                    low=self.state_constraints['psi_min'],
+                    high=self.state_constraints['psi_max'])
+
+                #randomize the airspeed of the aircraft
+                self.start_state[6] = np.random.uniform(
+                    low=self.state_constraints['airspeed_min'],
+                    high=self.state_constraints['airspeed_max'])
+                
+                distance_from_goal = self.compute_distance(
+                    self.start_state[0:3], self.goal_state)
                 
                 if distance_from_goal > 50:
                     correct_spawn = True
+                                    
+            #     self.start_state = np.random.uniform(
+            #         low=[self.state_constraints['x_min'],
+            #             self.state_constraints['y_min'],
+            #             self.state_constraints['z_min'],
+            #             0,
+            #             0,
+            #             #  self.state_constraints['phi_min'],
+            #             #  self.state_constraints['theta_min'],
+            #             self.state_constraints['psi_min'],
+            #             self.state_constraints['airspeed_min']],
+                    
+            #         high=[self.state_constraints['x_max'],
+            #             self.state_constraints['y_max'],
+            #             self.state_constraints['z_max'],
+            #             0,
+            #             0,
+            #             #   self.state_constraints['phi_max'],
+            #             #   self.state_constraints['theta_max'],
+            #             self.state_constraints['psi_max'],
+            #             self.state_constraints['airspeed_max']])
+            #     distance_from_goal = self.compute_distance(
+            #         self.start_state[0:3], self.goal_state)
+                
+            #     if distance_from_goal > 50:
+            #         correct_spawn = True
                 
             self.start_state = self.start_state.astype(np.float32)
             

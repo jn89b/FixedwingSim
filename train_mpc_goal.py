@@ -60,7 +60,7 @@ mpc_params = {
     'N': 10,
     'Q': ca.diag([1.0, 1.0, 1.0, 0, 0, 0.0, 0.0]),
     'R': ca.diag([0.1, 0.1, 0.1, 0.1]),
-    'dt': 0.1
+        'dt': 0.1
 }
 
 rl_control_constraints = {

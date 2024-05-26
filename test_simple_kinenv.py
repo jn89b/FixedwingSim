@@ -38,7 +38,7 @@ goal_state = np.array(goal_state)
 plane = Plane()
 plane.set_state_space()
 
-start_state = [-50, 0, 45, 0, 0, 0, 15]
+start_state = [-50, -50, 45, 0, 0, 0, 15]
 start_state = np.array(start_state)
 env = gym.make('SimpleKinematicEnv',
                control_constraints=control_constraints,
@@ -59,17 +59,17 @@ More idiot checks to make sure the environment is working as expected
 """
 
 #check if environment is working as expected
-N = 300
+N = 550
 
 obs, info = env.reset()
+print("goal location is ", env.goal_state)
 reward_history = []
 time_history = []
-
 for i in range(N):
     action = env.action_space.sample()
-    action = np.array([0.2, 0.01, 0, 0])
+    # action = np.array([0.0, -0.5, 0, 0])
     obs, reward, done, _, info = env.step(action)
-    print(f"Action: {action}, Reward: {reward}, Done: {done}")
+    #print(f"Action: {action}, Reward: {reward}, Done: {done}")
     reward_history.append(reward)
     time_history.append(i*env.dt)
     
@@ -81,12 +81,20 @@ fig, ax = plt.subplots()
 ax.plot(time_history, reward_history)
 
 
+
 #3d plot
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 ax.plot(history.x, history.y, history.z, label='ego')
+ax.scatter(history.x[0], history.y[0], history.z[0], 'bo')
 ax.plot(goal_state[0], goal_state[1], goal_state[2], 'ro', label='goal')
 ax.legend()
+
+fig,ax = plt.subplots(4,1 )
+ax[0].plot(time_history, np.rad2deg(history.roll)[:-1], label='roll')
+ax[1].plot(time_history, np.rad2deg(history.pitch)[:-1], label='pitch')
+ax[2].plot(time_history, np.rad2deg(history.yaw)[:-1], label='yaw')
+ax[3].plot(time_history, history.u[:-1], label='airspeed')
 
 plt.show()
 
