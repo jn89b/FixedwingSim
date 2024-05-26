@@ -2,6 +2,27 @@ import numpy as np
 import casadi as ca
 from matplotlib import pyplot as plt
 
+class DataHandler():
+    def __init__(self) -> None:
+        self.x = []
+        self.y = []
+        self.z = []
+        self.roll = []
+        self.pitch = []
+        self.yaw = []
+        self.u = []
+        self.time = []
+        
+    def update_data(self,info_array:np.ndarray):
+        self.x.append(info_array[0])
+        self.y.append(info_array[1])
+        self.z.append(info_array[2])
+        self.roll.append(info_array[3])
+        self.pitch.append(info_array[4])
+        self.yaw.append(info_array[5])
+        self.u.append(info_array[6])
+        # self.time.append(info_array[7])
+
 class Plane():
     def __init__(self, 
                  include_time:bool=False,
@@ -21,7 +42,16 @@ class Plane():
         self.max_airspeed_ms = max_airspeed_ms
         self.airspeed_tau = 0.05 #response of system to airspeed command
         self.pitch_tau = 0.02 #response of system to pitch command
-        
+        self.state_info = None
+        self.data_handler = DataHandler()
+    
+    def set_info(self, state_info:np.ndarray) -> None:
+        self.state_info = state_info
+        self.data_handler.update_data(state_info)
+    
+    def get_info(self) -> np.ndarray:
+        return self.state_info
+    
     def define_states(self):
         """define the states of your system"""
         #positions off the world in NED Frame
@@ -89,12 +119,11 @@ class Plane():
         self.z_fdot = -self.v * ca.sin(self.theta_f)
         
         self.phi_fdot   = (self.u_phi - self.phi_f) *(self.dt_val/self.pitch_tau)
-        self.theta_fdot = self.u_theta#(self.u_theta - self.theta_f) *(self.dt_val/self.pitch_tau)
+        self.theta_fdot = (self.u_theta - self.theta_f) *(self.dt_val/self.pitch_tau)
         
         #check if the denominator is zero
         self.psi_fdot   = self.u_psi + (self.g * (ca.tan(self.phi_f) / self.v_cmd))
         
-
         # self.t_dot = self.t 
         
         if self.include_time:

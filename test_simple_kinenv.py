@@ -16,10 +16,10 @@ control_constraints = {
 }
 
 state_constraints = {
-    'x_min': -150, #-np.inf,
-    'x_max': 150, #np.inf,
-    'y_min': -150, #-np.inf,
-    'y_max': 150, #np.inf,
+    'x_min': -750, #-np.inf,
+    'x_max': 750, #np.inf,
+    'y_min': -750, #-np.inf,
+    'y_max': 750, #np.inf,
     'z_min': 30,
     'z_max': 100,
     'phi_min':  -np.deg2rad(45),
@@ -46,6 +46,8 @@ env = gym.make('SimpleKinematicEnv',
                start_state = start_state,
                goal_state = goal_state,
                use_random_start = True,
+               use_pursuers = True,
+               num_pursuers = 2,
                ego_plane=plane)
 check_env(env)
 
@@ -59,7 +61,7 @@ More idiot checks to make sure the environment is working as expected
 """
 
 #check if environment is working as expected
-N = 550
+N = 551
 
 obs, info = env.reset()
 print("goal location is ", env.goal_state)
@@ -77,10 +79,10 @@ import matplotlib.pyplot as plt
 
 history = env.data_handler
 
+pursuers = env.pursuers
+
 fig, ax = plt.subplots()
 ax.plot(time_history, reward_history)
-
-
 
 #3d plot
 fig = plt.figure()
@@ -88,6 +90,11 @@ ax = fig.add_subplot(111, projection='3d')
 ax.plot(history.x, history.y, history.z, label='ego')
 ax.scatter(history.x[0], history.y[0], history.z[0], 'bo')
 ax.plot(goal_state[0], goal_state[1], goal_state[2], 'ro', label='goal')
+for p in pursuers:
+    ax.plot(p.data_handler.x, p.data_handler.y, p.data_handler.z, label='pursuer')
+    ax.scatter(p.data_handler.x[0], p.data_handler.y[0], p.data_handler.z[0], 'go')
+    
+
 ax.legend()
 
 fig,ax = plt.subplots(4,1 )

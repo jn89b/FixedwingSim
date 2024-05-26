@@ -34,7 +34,11 @@ class SimpleKinematicEnv(gymnasium.Env):
                  start_state:np.ndarray=None,
                  goal_state:np.ndarray=None,
                  distance_capture:float=10,
-                 use_random_start:bool=False) -> None:
+                 use_random_start:bool=False,
+                 use_pursuers:bool=False,
+                 num_pursuers:int=0,
+                 pursuer_capture_dist:float=20,
+                 pursuer_spawn_dist:float=75) -> None:
         """
         This is a environment that has the kinematic equations of motion for a fixed-wing aircraft.
         See if we can do some basic tasks such as goal following and then
@@ -50,8 +54,16 @@ class SimpleKinematicEnv(gymnasium.Env):
         self.original_start_state = start_state
         self.start_state = start_state
         self.goal_state = goal_state
+        self.use_pursuers = use_pursuers
+        self.num_pursuers = num_pursuers
+        self.pursuer_capture_dist = pursuer_capture_dist
+        self.pursuer_spawn_dist = pursuer_spawn_dist
+        
         self.data_handler = DataHandler()
-                
+        
+        if self.use_pursuers:
+            self.pursuers = self.init_pursuers()
+        
         self.norm_start_state = self.map_real_observation_to_normalized_observation(
             self.start_state)
         #check if start state array is the correct size
@@ -64,16 +76,18 @@ class SimpleKinematicEnv(gymnasium.Env):
         self.action_space = self.init_action_space()
         self.ego_obs_space = self.init_ego_observation()
         self.old_distance_from_goal = self.compute_distance(self.start_state[0:3], self.goal_state)
-        
-        self.observation_space = spaces.Dict({
-            'ego': self.ego_obs_space,
-            'actual_ego': self.actual_ego_observation()
-        })        
-        
+                
         self.time_constant = 550 #the time constant of the system
         self.time_limit = self.time_constant
         self.dt = self.ego_plane.dt_val
+               
+        self.observation_space = spaces.Dict({
+            'ego': self.ego_obs_space,
+            'actual_ego': self.actual_ego_observation()
+        })
         
+
+     
     def compute_distance(self, p1: np.ndarray, p2: np.ndarray) -> float:
         """
         Compute the distance between two points.
@@ -105,6 +119,69 @@ class SimpleKinematicEnv(gymnasium.Env):
                                   dtype=np.float32)
         
         return action_space
+    
+    def init_pursuers(self) -> list[Plane]:
+        pursuers = []
+        init_count = 0 
+        ego_position = self.start_state[0:3]
+        ego_heading = self.start_state[5]
+        while init_count < self.num_pursuers:
+            
+            pursuer = Plane()
+            pursuer.set_state_space()
+            rand_x = np.random.uniform(-self.pursuer_spawn_dist, 
+                                       self.pursuer_spawn_dist)
+            
+            rand_y = np.random.uniform(-self.pursuer_spawn_dist,
+                                        self.pursuer_spawn_dist)
+            
+            rand_z = np.random.uniform(self.state_constraints['z_min'],
+                                        self.state_constraints['z_max'])
+            
+            
+            rand_x = ego_position[0] + rand_x
+            rand_y = ego_position[1] + rand_y
+            
+            # rand_x = np.random.uniform(
+            #     low=self.state_constraints['x_min'],
+            #     high=self.state_constraints['x_max'])
+            
+            # rand_y = np.random.uniform(
+            #     low=self.state_constraints['y_min'],
+            #     high=self.state_constraints['y_max'])
+            
+            # rand_z = np.random.uniform(
+            #     low=self.state_constraints['z_min'],
+            #     high=self.state_constraints['z_max'])
+            
+            rand_heading = ego_heading + \
+                np.random.uniform(-np.deg2rad(45), np.deg2rad(45))
+            
+            # rand_heading = np.random.uniform(
+            #     low=self.state_constraints['psi_min'],
+            #     high=self.state_constraints['psi_max'])
+                
+            rand_airspeed = np.random.uniform(
+                low=self.state_constraints['airspeed_min'],
+                high=self.state_constraints['airspeed_max'])
+                
+            pursuer_state = np.array([rand_x, rand_y, rand_z, 
+                                      rand_heading, 
+                                      0, 
+                                      0, 
+                                      rand_airspeed])
+            
+            dist_from_ego = self.compute_distance(
+                self.start_state[0:3], pursuer_state[0:3])
+            
+            if dist_from_ego < self.pursuer_spawn_dist/2:
+                continue
+            
+            pursuer.set_info(pursuer_state)
+            pursuers.append(pursuer)
+            init_count += 1
+        
+        return pursuers
     
     def actual_ego_observation(self) -> spaces.Dict:
         """
@@ -141,9 +218,21 @@ class SimpleKinematicEnv(gymnasium.Env):
         high_obs.append(self.state_constraints['airspeed_max'])
         low_obs.append(self.state_constraints['airspeed_min'])
         
+        if self.use_pursuers:
+            num_pursuers = self.num_pursuers
+            for i in range(num_pursuers):
+                #this is for actual distance from pursuer
+                high_obs.append(np.inf)
+                low_obs.append(-np.inf)
+                
+                #this is for actual heading difference from pursuer
+                high_obs.append(np.inf)
+                low_obs.append(-np.inf)
+                
         obs_space = spaces.Box(low=np.array(low_obs),
                                             high=np.array(high_obs),
                                             dtype=np.float32)
+        
             
         return obs_space
     
@@ -161,11 +250,20 @@ class SimpleKinematicEnv(gymnasium.Env):
         high_obs = [1, 1, 1, 1, 1, 1, 1]
         low_obs = [-1, -1, -1, -1, -1, -1, -1]
 
-
+        if self.use_pursuers:
+            for p in self.pursuers:
+                #this is the normalized distance from the pursuer
+                high_obs.append(2)
+                low_obs.append(-1)
+                
+                #this is the normalized heading difference from the pursuer               
+                high_obs.append(1)
+                low_obs.append(-1)
+        
         obs_space = spaces.Box(low=np.array(low_obs),
                                             high=np.array(high_obs),
                                             dtype=np.float32)
-        
+                
         return obs_space
     
     def map_real_to_norm(self, norm_max:float, norm_min:float, real_val:float) -> float:
@@ -284,13 +382,57 @@ class SimpleKinematicEnv(gymnasium.Env):
     
     def __get_observation(self) -> dict:
         """
-        Get the observation of the environment
+        Get the observation of the environment if we have pursuers
+        append the information of the pursuers to the observation space
         """
-        obs = {
-            "ego": self.norm_start_state,
-            "actual_ego": self.start_state
-        }
-        
+
+        # need to append this to the observation space
+        # we will need to store the relative position of the pursuers
+        # and the heading of the pursuers
+        if self.use_pursuers:
+            ego_obs = self.norm_start_state
+            actual_ego_obs = self.start_state
+            for p in self.pursuers:
+                pursuer_state = p.get_info()
+                
+                distance_from_pursuer = self.compute_distance(
+                    self.start_state[0:3], pursuer_state[0:3])
+                heading_pursuer = pursuer_state[5]
+                
+                norm_pursuer = self.map_real_observation_to_normalized_observation(
+                    pursuer_state)
+                
+                norm_dist_from_pursuer = self.compute_distance(
+                    self.norm_start_state[0:3], norm_pursuer[0:3])
+
+                
+                pursuer_norm_heading = self.map_real_to_norm(
+                    self.state_constraints['psi_max'],
+                    self.state_constraints['psi_min'],
+                    heading_pursuer)
+                norm_heading_diff = abs(self.norm_start_state[5] - pursuer_norm_heading)
+                                    
+                ego_obs = np.append(ego_obs, norm_dist_from_pursuer)
+                ego_obs = np.append(ego_obs, norm_heading_diff)
+                
+                actual_ego_obs = np.append(actual_ego_obs, 
+                                           distance_from_pursuer)
+                
+                actual_ego_obs = np.append(actual_ego_obs,
+                                             heading_pursuer)
+                #make sure type is float32
+                ego_obs = ego_obs.astype(np.float32)
+                actual_ego_obs = actual_ego_obs.astype(np.float32)
+                
+            obs = {
+                "ego": ego_obs,
+                "actual_ego": actual_ego_obs
+                }            
+        else:
+            obs = {
+                "ego": self.norm_start_state,
+                "actual_ego": self.start_state
+            }
         return obs
     
     def __get_info(self) -> dict:
@@ -328,6 +470,16 @@ class SimpleKinematicEnv(gymnasium.Env):
         distance_from_goal = self.compute_distance(current_position, self.goal_state)
         altitude_diff = abs(self.goal_state[2] - current_position[2])
 
+        goal_dz_norm = self.map_real_to_norm(self.state_constraints['z_max'],
+                                                self.state_constraints['z_min'],
+                                                self.goal_state[2])
+
+        z_norm = self.map_real_to_norm(self.state_constraints['z_max'],
+                                        self.state_constraints['z_min'],
+                                        current_position[2])
+        dz = abs(goal_dz_norm - z_norm)
+        dz = np.clip(dz, 0, 1)
+        
         if current_position[0] < self.state_constraints['x_min']:
             reward = -10
             done = True
@@ -369,16 +521,110 @@ class SimpleKinematicEnv(gymnasium.Env):
             return reward, done 
         
         if self.time_limit <= 0:
-            reward = time_step_penalty - (distance_from_goal) #- (altitude_diff)
+            reward = -10 #- (altitude_diff)
             done = True
             return reward , done
         
         done = False
         #we want to get closer to the goal 
-        reward = dot_product #time_step_penalty - (distance_from_goal)
+        reward = dot_product - dz #time_step_penalty - (distance_from_goal)
         self.old_distance_from_goal = distance_from_goal
         return reward, done 
     
+    def __get_evader_reward(self, current_state:np.ndarray) -> tuple:
+        reward = 0
+        
+        current_position = current_state[0:3]        
+        if self.time_limit <= 0:
+            print("You Survived!")
+            reward = 1000
+            done = True
+            return reward, done
+        
+        if current_position[0] < self.state_constraints['x_min']:
+            reward = -10
+            done = True
+            # print("Crashed! Too far left!", current_position)
+            return reward, done
+        elif current_position[0] > self.state_constraints['x_max']:
+            reward = -10
+            done = True
+            # print("Crashed! Too far right!", current_position)
+            return reward, done
+        
+        if current_position[1] < self.state_constraints['y_min']:
+            reward = -10
+            done = True
+            # print("Crashed! Too far back!", current_position)
+            return reward, done
+        elif current_position[1] > self.state_constraints['y_max']:
+            reward = -10
+            done = True
+            # print("Crashed! Too far forward!", current_position)
+            return reward, done
+
+        if current_position[2] < self.state_constraints['z_min']:
+            reward = -10
+            done = True
+            #print("Crashed! Too low!", current_position)
+            return reward, done
+        
+        if current_position[2] > self.state_constraints['z_max']:
+            reward = -10
+            done = True
+            # print("Crashed! Too high!", current_position)
+            return reward, done
+        
+        #compute costs from pursuers
+        caught = False
+        sum_reward = 0
+        # we will take the average of the distance and the dot product
+        # between the heading of the pursuer and the evader
+        unit_vector_ego = np.array([math.cos(current_state[5]),
+                                    math.sin(current_state[5])])
+        
+        for p in self.pursuers:
+            pursuer_state = p.get_info()
+            norm_pursuer = self.map_real_observation_to_normalized_observation(
+                pursuer_state)
+            
+            #clip the pursuer state to the constraints of the environment
+            pursuer_state[0] = np.clip(pursuer_state[0],
+                                        self.state_constraints['x_min'],
+                                        self.state_constraints['x_max'])
+            pursuer_state[1] = np.clip(pursuer_state[1],
+                                        self.state_constraints['y_min'],
+                                        self.state_constraints['y_max'])
+            pursuer_state[2] = np.clip(pursuer_state[2],
+                                        self.state_constraints['z_min'],
+                                        self.state_constraints['z_max'])
+
+            distance_from_pursuer = self.compute_distance(
+                current_state[0:3], pursuer_state[0:3])
+
+            norm_dist_from_pursuer = self.compute_distance(
+                self.norm_start_state[0:3], norm_pursuer[0:3]) 
+                
+            heading_pursuer = pursuer_state[5]
+            unit_vector_pursuer = np.array([math.cos(heading_pursuer),
+                                             math.sin(heading_pursuer)])
+            dot_product = np.dot(unit_vector_ego, unit_vector_pursuer)    
+            
+            if distance_from_pursuer < self.pursuer_capture_dist:
+                sum_reward += -10 
+                caught = True
+            else:
+                sum_reward += -dot_product + norm_dist_from_pursuer
+                
+        if caught:
+            done = True
+            reward = -100 + (sum_reward/len(self.pursuers))
+            return reward, done
+        else:
+            done = False
+            reward = sum_reward/len(self.pursuers) + 1
+            return reward, done
+             
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
         """
         Note action is a normalized action that must be mapped to the real
@@ -388,7 +634,46 @@ class SimpleKinematicEnv(gymnasium.Env):
         next_state = self.ego_plane.rk45(self.start_state, 
                                          real_action, 
                                          self.dt)
-        reward, done = self.__get_reward(next_state)
+        
+        if self.use_pursuers:
+            #loop through pursuers and run PN guidance for each pursuer
+            for p in self.pursuers:
+                pursuer_state = p.get_info()
+                
+                #this is the actual pro nav algorithm
+                dx = next_state[0] - pursuer_state[0]
+                dy = next_state[1] - pursuer_state[1]
+                dz = next_state[2] - pursuer_state[2]
+            
+                los = math.atan2(dy, dx)
+                pitch_los = math.atan2(dz, math.sqrt(dx**2 + dy**2))
+                error_pitch = pitch_los - pursuer_state[4]
+                error_los = los - pursuer_state[5]
+                                
+                if error_los > np.deg2rad(20):
+                    vel_cmd = 25
+                else:
+                    vel_cmd = 15
+                
+                #remember that this is in NED frame
+                pitch_cmd = np.clip(error_pitch, -np.deg2rad(20), np.deg2rad(20))
+                roll_cmd = np.clip(error_los, -np.deg2rad(30), np.deg2rad(30))
+                los = np.clip(los, -np.pi, np.pi)
+                pursuer_action = [
+                    roll_cmd*0.4,
+                    -pitch_cmd*0.4,
+                    error_los,
+                    vel_cmd 
+                ]
+                
+                pursuer_next_state = p.rk45(pursuer_state, pursuer_action, self.dt)
+                p.set_info(pursuer_next_state)
+                
+            reward, done = self.__get_evader_reward(next_state)
+            #use other reward function to avoid pursuers
+            # need to also step the pursuers
+        else:
+            reward, done = self.__get_reward(next_state)
         
         self.norm_start_state = self.map_real_observation_to_normalized_observation(
             next_state)
@@ -402,7 +687,7 @@ class SimpleKinematicEnv(gymnasium.Env):
         self.time_limit -= 1
         
         self.data_handler.update_data(self.start_state) 
-            
+
         return observation, reward, done, False, info
         
     def reset(self, seed=None) -> Any:
@@ -422,6 +707,10 @@ class SimpleKinematicEnv(gymnasium.Env):
                 
                 self.start_state = self.original_start_state
                 
+                self.start_state[2] = np.random.uniform(
+                    low=self.state_constraints['z_min'],
+                    high=self.state_constraints['z_max'])
+                
                 #randomize the heading of the aircraft
                 self.start_state[5] = np.random.uniform(
                     low=self.state_constraints['psi_min'],
@@ -437,39 +726,16 @@ class SimpleKinematicEnv(gymnasium.Env):
                 
                 if distance_from_goal > 50:
                     correct_spawn = True
-                                    
-            #     self.start_state = np.random.uniform(
-            #         low=[self.state_constraints['x_min'],
-            #             self.state_constraints['y_min'],
-            #             self.state_constraints['z_min'],
-            #             0,
-            #             0,
-            #             #  self.state_constraints['phi_min'],
-            #             #  self.state_constraints['theta_min'],
-            #             self.state_constraints['psi_min'],
-            #             self.state_constraints['airspeed_min']],
-                    
-            #         high=[self.state_constraints['x_max'],
-            #             self.state_constraints['y_max'],
-            #             self.state_constraints['z_max'],
-            #             0,
-            #             0,
-            #             #   self.state_constraints['phi_max'],
-            #             #   self.state_constraints['theta_max'],
-            #             self.state_constraints['psi_max'],
-            #             self.state_constraints['airspeed_max']])
-            #     distance_from_goal = self.compute_distance(
-            #         self.start_state[0:3], self.goal_state)
-                
-            #     if distance_from_goal > 50:
-            #         correct_spawn = True
-                
+                                
             self.start_state = self.start_state.astype(np.float32)
             
         else:
             self.start_state = self.original_start_state
             self.start_state = self.start_state.astype(np.float32)
             
+        if self.use_pursuers:
+            self.pursuers = self.init_pursuers()
+        
         self.norm_start_state = self.map_real_observation_to_normalized_observation(
             self.start_state)
         self.norm_start_state = self.norm_start_state.astype(np.float32)
