@@ -76,7 +76,7 @@ vec_env = make_vec_env('SimpleKinematicEnv', n_envs=num_envs,
 n_steps = 550 * 2 // num_envs
 n_epochs = 10
 batch_size = 100
-# model_name = "kinematic_early_avoidance"
+#model_name = "kinematic_early_avoidance"
 model_name = "kinematic_avoidance_ppo_4"
 checkpoint_callback = CheckpointCallback(save_freq=10000, 
                                         save_path='./models/'+model_name+'_1/',
