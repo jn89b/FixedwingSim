@@ -583,6 +583,9 @@ class SimpleKinematicEnv(gymnasium.Env):
         unit_vector_ego = np.array([math.cos(current_state[5]),
                                     math.sin(current_state[5])])
         
+        #map this as probability of capture?
+        dot_products = []
+        norm_distances = []
         for p in self.pursuers:
             pursuer_state = p.get_info()
             norm_pursuer = self.map_real_observation_to_normalized_observation(
@@ -610,19 +613,24 @@ class SimpleKinematicEnv(gymnasium.Env):
                                              math.sin(heading_pursuer)])
             dot_product = np.dot(unit_vector_ego, unit_vector_pursuer)    
             
+            norm_distances.append(norm_dist_from_pursuer)
+            dot_products.append(dot_product)
+            
             if distance_from_pursuer < self.pursuer_capture_dist:
-                sum_reward += -10 
+                #sum_reward += -10 
                 caught = True
-            else:
-                sum_reward += -dot_product + norm_dist_from_pursuer
-                
+                #sum_reward += -dot_product + norm_dist_from_pursuer
+        
+        min_norm_distance = min(norm_distances)
+        min_dot_product = min(dot_products)
+        #should I penalize the worst case award? 
         if caught:
             done = True
-            reward = -100 + (sum_reward/len(self.pursuers))
+            reward = -100 + min_norm_distance + min_dot_product#(sum_reward/len(self.pursuers))
             return reward, done
         else:
             done = False
-            reward = sum_reward/len(self.pursuers) + 1
+            reward = min_norm_distance + min_dot_product + 1#sum_reward/len(self.pursuers) + 1
             return reward, done
              
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
@@ -651,7 +659,7 @@ class SimpleKinematicEnv(gymnasium.Env):
                 error_los = los - pursuer_state[5]
                                 
                 if error_los > np.deg2rad(20):
-                    vel_cmd = 25
+                    vel_cmd = 30
                 else:
                     vel_cmd = 15
                 
@@ -660,8 +668,8 @@ class SimpleKinematicEnv(gymnasium.Env):
                 roll_cmd = np.clip(error_los, -np.deg2rad(30), np.deg2rad(30))
                 los = np.clip(los, -np.pi, np.pi)
                 pursuer_action = [
-                    roll_cmd*0.4,
-                    -pitch_cmd*0.4,
+                    roll_cmd*0.2,
+                    -pitch_cmd*0.2,
                     error_los,
                     vel_cmd 
                 ]

@@ -64,7 +64,6 @@ More idiot checks to make sure the environment is working as expected
 N = 551
 
 obs, info = env.reset()
-print("goal location is ", env.goal_state)
 reward_history = []
 time_history = []
 for i in range(N):
@@ -78,7 +77,6 @@ for i in range(N):
 import matplotlib.pyplot as plt
 
 history = env.data_handler
-
 pursuers = env.pursuers
 
 fig, ax = plt.subplots()
@@ -93,7 +91,6 @@ ax.plot(goal_state[0], goal_state[1], goal_state[2], 'ro', label='goal')
 for p in pursuers:
     ax.plot(p.data_handler.x, p.data_handler.y, p.data_handler.z, label='pursuer')
     ax.scatter(p.data_handler.x[0], p.data_handler.y[0], p.data_handler.z[0], 'go')
-    
 
 ax.legend()
 

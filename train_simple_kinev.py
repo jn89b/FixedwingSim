@@ -8,7 +8,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 
 LOAD_MODEL = True
-TOTAL_TIMESTEPS = 2500000#
+TOTAL_TIMESTEPS = 5500000#
 CONTINUE_TRAINING = False
 COMPARE_MODELS = False
 
@@ -122,7 +122,7 @@ done = False
 random.seed()
 rand_num = random.randint(0, 100)
 print("rand_num", rand_num)
-for i in range(24):
+for i in range(30):
     obs,info = env.reset()
 print("start state", obs)
 
