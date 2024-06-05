@@ -77,7 +77,7 @@ class SimpleKinematicEnv(gymnasium.Env):
         self.ego_obs_space = self.init_ego_observation()
         self.old_distance_from_goal = self.compute_distance(self.start_state[0:3], self.goal_state)
                 
-        self.time_constant = 550 #the time constant of the system
+        self.time_constant = 650 #the time constant of the system
         self.time_limit = self.time_constant
         self.dt = self.ego_plane.dt_val
                
@@ -137,8 +137,7 @@ class SimpleKinematicEnv(gymnasium.Env):
             
             rand_z = np.random.uniform(self.state_constraints['z_min'],
                                         self.state_constraints['z_max'])
-            
-            
+
             rand_x = ego_position[0] + rand_x
             rand_y = ego_position[1] + rand_y
             
@@ -174,7 +173,7 @@ class SimpleKinematicEnv(gymnasium.Env):
             dist_from_ego = self.compute_distance(
                 self.start_state[0:3], pursuer_state[0:3])
             
-            if dist_from_ego < self.pursuer_spawn_dist/2:
+            if dist_from_ego < self.pursuer_spawn_dist:
                 continue
             
             pursuer.set_info(pursuer_state)
@@ -541,36 +540,36 @@ class SimpleKinematicEnv(gymnasium.Env):
             done = True
             return reward, done
         
+        out_of_bounds_penalty = -1000
         if current_position[0] < self.state_constraints['x_min']:
-            reward = -10
+            reward = out_of_bounds_penalty
             done = True
-            # print("Crashed! Too far left!", current_position)
             return reward, done
         elif current_position[0] > self.state_constraints['x_max']:
-            reward = -10
+            reward = out_of_bounds_penalty
             done = True
             # print("Crashed! Too far right!", current_position)
             return reward, done
         
         if current_position[1] < self.state_constraints['y_min']:
-            reward = -10
+            reward = out_of_bounds_penalty
             done = True
             # print("Crashed! Too far back!", current_position)
             return reward, done
         elif current_position[1] > self.state_constraints['y_max']:
-            reward = -10
+            reward = out_of_bounds_penalty
             done = True
             # print("Crashed! Too far forward!", current_position)
             return reward, done
 
         if current_position[2] < self.state_constraints['z_min']:
-            reward = -10
+            reward = out_of_bounds_penalty
             done = True
             #print("Crashed! Too low!", current_position)
             return reward, done
         
         if current_position[2] > self.state_constraints['z_max']:
-            reward = -10
+            reward = out_of_bounds_penalty
             done = True
             # print("Crashed! Too high!", current_position)
             return reward, done
@@ -616,21 +615,31 @@ class SimpleKinematicEnv(gymnasium.Env):
             norm_distances.append(norm_dist_from_pursuer)
             dot_products.append(dot_product)
             
-            if distance_from_pursuer < self.pursuer_capture_dist:
+            #check if within heading
+            heading_error = abs(current_state[5] - heading_pursuer)
+            
+            #wrap the heading error
+            if heading_error > np.pi:
+                heading_error = 2*np.pi - heading_error
+            elif heading_error < -np.pi:
+                heading_error = 2*np.pi + heading_error
+                
+            if distance_from_pursuer < self.pursuer_capture_dist and \
+                abs(heading_error) <= np.deg2rad(45):
                 #sum_reward += -10 
                 caught = True
                 #sum_reward += -dot_product + norm_dist_from_pursuer
         
         min_norm_distance = min(norm_distances)
-        min_dot_product = min(dot_products)
+        min_dot_product = min(dot_products) 
         #should I penalize the worst case award? 
         if caught:
             done = True
-            reward = -100 + min_norm_distance + min_dot_product#(sum_reward/len(self.pursuers))
+            reward = -100 #+ min_norm_distance + min_dot_product#(sum_reward/len(self.pursuers))
             return reward, done
         else:
             done = False
-            reward = min_norm_distance + min_dot_product + 1#sum_reward/len(self.pursuers) + 1
+            reward = 1 #+ min_dot_product + min_norm_distance#sum_reward/len(self.pursuers) + 1
             return reward, done
              
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
@@ -639,6 +648,8 @@ class SimpleKinematicEnv(gymnasium.Env):
         """
         
         real_action = self.map_normalized_action_to_real_action(action)
+        #set pitch to 0 for now to see what happens
+        real_action[1] = 0
         next_state = self.ego_plane.rk45(self.start_state, 
                                          real_action, 
                                          self.dt)
@@ -716,8 +727,8 @@ class SimpleKinematicEnv(gymnasium.Env):
                 self.start_state = self.original_start_state
                 
                 self.start_state[2] = np.random.uniform(
-                    low=self.state_constraints['z_min'],
-                    high=self.state_constraints['z_max'])
+                    low=self.state_constraints['z_min']+10,
+                    high=self.state_constraints['z_max']-10)
                 
                 #randomize the heading of the aircraft
                 self.start_state[5] = np.random.uniform(

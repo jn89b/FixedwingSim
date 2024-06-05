@@ -38,7 +38,6 @@ class DataHandler():
         self.pitch.append(info_array[4])
         self.yaw.append(info_array[5])
         self.u.append(info_array[6])
-        
 
 def init_mpc_controller(mpc_control_constraints:dict,
                         state_constraints:dict,

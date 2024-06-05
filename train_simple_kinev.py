@@ -8,7 +8,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 
 LOAD_MODEL = True
-TOTAL_TIMESTEPS = 5500000#
+TOTAL_TIMESTEPS = 2500000#
 CONTINUE_TRAINING = False
 COMPARE_MODELS = False
 
@@ -24,10 +24,10 @@ control_constraints = {
 }
 
 state_constraints = {
-    'x_min': -500, #-np.inf,
-    'x_max': 500, #np.inf,
-    'y_min': -500, #-np.inf,
-    'y_max': 500, #np.inf,
+    'x_min': -3000, #-np.inf,
+    'x_max': 3000, #np.inf,
+    'y_min': -3000, #-np.inf,
+    'y_max': 3000, #np.inf,
     'z_min': 30,
     'z_max': 80,
     'phi_min':  -np.deg2rad(45),
@@ -49,6 +49,7 @@ plane.set_state_space()
 start_state = [0, 0, 50, 0, 0, 0, 18]
 start_state = np.array(start_state)
 
+n_pursuers = 1
 env = gym.make('SimpleKinematicEnv',
                control_constraints=control_constraints,
                state_constraints=state_constraints,
@@ -56,7 +57,7 @@ env = gym.make('SimpleKinematicEnv',
                goal_state = goal_state,
                use_random_start = True,
                use_pursuers = True,
-               num_pursuers = 2,
+               num_pursuers = n_pursuers,
                ego_plane=plane,
                )
 check_env(env)
@@ -69,15 +70,16 @@ vec_env = make_vec_env('SimpleKinematicEnv', n_envs=num_envs,
                             'goal_state':goal_state,
                             'use_random_start':True,
                             'use_pursuers':True,
-                            'num_pursuers':2,
+                            'num_pursuers':n_pursuers,
                             'ego_plane':plane
                         })
 
-n_steps = 550 * 2 // num_envs
+n_steps = 650 * 2 // num_envs
 n_epochs = 10
 batch_size = 100
-#model_name = "kinematic_early_avoidance"
-model_name = "kinematic_avoidance_ppo_4"
+model_name = "kinematic_avoidance_ppo_pessimistic_in_progress"
+model_name ="early_model"
+#model_name = "kinematic_avoidance_ppo_pessimistic"
 checkpoint_callback = CheckpointCallback(save_freq=10000, 
                                         save_path='./models/'+model_name+'_1/',
                                         name_prefix=model_name)
@@ -122,20 +124,28 @@ done = False
 random.seed()
 rand_num = random.randint(0, 100)
 print("rand_num", rand_num)
-for i in range(30):
+
+histories = []
+pursuer_histories = []
+for i in range(15):
+    print("episode", i)
     obs,info = env.reset()
-print("start state", obs)
-
-reward_history = []    
-while done == False:
-    action, _states = model.predict(obs)
-    #print("action", action)
-    obs, reward, done, _, info = env.step(action)
-    reward_history.append(reward)
-    # print("reward", reward)
-    # print("done", done)
-    #time_history.append(env.time)
-
+    reward_history = []
+    done = False    
+    while done == False:
+        action, _states = model.predict(obs)
+        #print("action", action)
+        obs, reward, done, _, info = env.step(action)
+        reward_history.append(reward)
+        history = env.data_handler
+        
+        #print("reward", reward)
+        # print("done", done)
+        #time_history.append(env.time)
+    histories.append(history)
+    pursuer_histories.append(env.pursuers)
+    # pursuer_histories.append(env.pursu)
+    
 import matplotlib.pyplot as plt
 history = env.data_handler
 fig, ax = plt.subplots()
@@ -144,15 +154,28 @@ ax.plot(reward_history)
 pursuers = env.pursuers
 
 #3d plot
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.plot(history.x, history.y, history.z, label='ego')
-ax.scatter(history.x[0], history.y[0], history.z[0], 'bo')
-ax.plot(goal_state[0], goal_state[1], goal_state[2], 'ro', label='goal')
-for i, pursuer in enumerate(pursuers):
-    ax.scatter(pursuer.data_handler.x[0], pursuer.data_handler.y[0], pursuer.data_handler.z[0], label=f'pursuer start {i}')
-    ax.plot(pursuer.data_handler.x, pursuer.data_handler.y, pursuer.data_handler.z, label=f'pursuer {i}')
-ax.legend()
+for j, h in enumerate(histories):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(h.x, h.y, h.z, label='ego')
+    ax.scatter(h.x[0], h.y[0], h.z[0], 'bo')
+    ax.plot(goal_state[0], goal_state[1], goal_state[2], 'ro', label='goal')
+    pursuers = pursuer_histories[i]
+    for i, pursuer in enumerate(pursuers):
+        ax.scatter(pursuer.data_handler.x[0], pursuer.data_handler.y[0], pursuer.data_handler.z[0], label=f'pursuer start {i}')
+        ax.plot(pursuer.data_handler.x, pursuer.data_handler.y, pursuer.data_handler.z, label=f'pursuer {i}')
+    #set title
+    ax.set_title(f"Episode {j}")
+    ax.legend()
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+# ax.plot(history.x, history.y, history.z, label='ego')
+# ax.scatter(history.x[0], history.y[0], history.z[0], 'bo')
+# ax.plot(goal_state[0], goal_state[1], goal_state[2], 'ro', label='goal')
+# for i, pursuer in enumerate(pursuers):
+#     ax.scatter(pursuer.data_handler.x[0], pursuer.data_handler.y[0], pursuer.data_handler.z[0], label=f'pursuer start {i}')
+#     ax.plot(pursuer.data_handler.x, pursuer.data_handler.y, pursuer.data_handler.z, label=f'pursuer {i}')
+# ax.legend()
 
 fig,ax = plt.subplots(4,1 )
 ax[0].plot(np.rad2deg(history.roll)[:-1], label='roll')
