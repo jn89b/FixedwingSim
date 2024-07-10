@@ -61,7 +61,7 @@ More idiot checks to make sure the environment is working as expected
 """
 
 #check if environment is working as expected
-N = 551
+N = 50
 
 obs, info = env.reset()
 reward_history = []
@@ -72,15 +72,14 @@ for i in range(N):
     obs, reward, done, _, info = env.step(action)
     #print(f"Action: {action}, Reward: {reward}, Done: {done}")
     reward_history.append(reward)
-    time_history.append(i*env.dt)
     
 import matplotlib.pyplot as plt
 
 history = env.data_handler
 pursuers = env.pursuers
-
+time_history = history.time_history
 fig, ax = plt.subplots()
-ax.plot(time_history, reward_history)
+ax.plot(reward_history)
 
 #3d plot
 fig = plt.figure()

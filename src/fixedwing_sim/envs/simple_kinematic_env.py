@@ -16,6 +16,7 @@ class DataHandler():
         self.pitch = []
         self.yaw = []
         self.u = []
+        self.time_history = []
         
     def update_data(self,info_array:np.ndarray):
         self.x.append(info_array[0])
@@ -25,6 +26,9 @@ class DataHandler():
         self.pitch.append(info_array[4])
         self.yaw.append(info_array[5])
         self.u.append(info_array[6])
+
+    def update_time(self, time:float) -> None:
+        self.time_history.append(time)
 
 class SimpleKinematicEnv(gymnasium.Env):
     def __init__(self,
@@ -40,14 +44,17 @@ class SimpleKinematicEnv(gymnasium.Env):
                  pursuer_capture_dist:float=20,
                  pursuer_spawn_dist:float=75) -> None:
         """
-        This is a environment that has the kinematic equations of motion for a fixed-wing aircraft.
+        This is a environment that has the kinematic equations of 
+        motion for a fixed-wing aircraft.
         See if we can do some basic tasks such as goal following and then
         do some more complex tasks such as pursuer avoidance.
-        The real test is to see if we can send it to an autopilot and have it fly.
+        The real test is to see if we can send it to an 
+        autopilot and have it fly.
         """
         super(SimpleKinematicEnv, self).__init__()
         self.control_constraints = control_constraints
         self.state_constraints = state_constraints
+        print("state_constraints", state_constraints)
         self.ego_plane = ego_plane
         
         #this start state is the actual state of the aircraft, not the normalized state
@@ -75,9 +82,10 @@ class SimpleKinematicEnv(gymnasium.Env):
         self.use_random_start = use_random_start
         self.action_space = self.init_action_space()
         self.ego_obs_space = self.init_ego_observation()
-        self.old_distance_from_goal = self.compute_distance(self.start_state[0:3], self.goal_state)
+        self.old_distance_from_goal = self.compute_distance(self.start_state[0:3], 
+                                                            self.goal_state)
                 
-        self.time_constant = 650 #the time constant of the system
+        self.time_constant = 50 #the time constant of the system
         self.time_limit = self.time_constant
         self.dt = self.ego_plane.dt_val
                
@@ -266,9 +274,13 @@ class SimpleKinematicEnv(gymnasium.Env):
         return obs_space
     
     def map_real_to_norm(self, norm_max:float, norm_min:float, real_val:float) -> float:
+        """I can probably abstract this out to a utility function"""
         return 2 * (real_val - norm_min) / (norm_max - norm_min) - 1
     
     def norm_map_to_real(self, norm_max:float, norm_min:float, norm_val:float) -> float:
+        """
+        I can probably abstract this out to a utility function
+        """
         return norm_min + (norm_max - norm_min) * (norm_val + 1) / 2
     
     def map_normalized_observation_to_real_observation(self, observation:np.ndarray) -> np.ndarray:
@@ -535,7 +547,7 @@ class SimpleKinematicEnv(gymnasium.Env):
         
         current_position = current_state[0:3]        
         if self.time_limit <= 0:
-            print("You Survived!")
+            # print("You Survived!")
             reward = 1000
             done = True
             return reward, done
@@ -565,13 +577,13 @@ class SimpleKinematicEnv(gymnasium.Env):
         if current_position[2] < self.state_constraints['z_min']:
             reward = out_of_bounds_penalty
             done = True
-            #print("Crashed! Too low!", current_position)
+            print("Crashed! Too low!", current_position)
             return reward, done
         
         if current_position[2] > self.state_constraints['z_max']:
             reward = out_of_bounds_penalty
             done = True
-            # print("Crashed! Too high!", current_position)
+            print("Crashed! Too high!", current_position)
             return reward, done
         
         #compute costs from pursuers
@@ -639,60 +651,73 @@ class SimpleKinematicEnv(gymnasium.Env):
             return reward, done
         else:
             done = False
-            reward = 1 #+ min_dot_product + min_norm_distance#sum_reward/len(self.pursuers) + 1
+            reward = 1 + min_dot_product + min_norm_distance#sum_reward/len(self.pursuers) + 1
             return reward, done
              
     def step(self, action:np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
         """
         Note action is a normalized action that must be mapped to the real
+        Eventually abstract this??
         """
-        
         real_action = self.map_normalized_action_to_real_action(action)
         #set pitch to 0 for now to see what happens
-        real_action[1] = 0
+        # real_action[1] = 0
         next_state = self.ego_plane.rk45(self.start_state, 
                                          real_action, 
                                          self.dt)
+        # to make the control more smooth we will update the decision input
+        # every 1 second
+        every_one_second = int(0.5/self.dt)
+        current_time_step = self.time_constant - self.time_limit
         
-        if self.use_pursuers:
-            #loop through pursuers and run PN guidance for each pursuer
-            for p in self.pursuers:
-                pursuer_state = p.get_info()
+        for i in range(every_one_second):
+            next_state = self.ego_plane.rk45(next_state, 
+                                             real_action, 
+                                             self.dt)
+            self.data_handler.update_data(self.start_state)
+            actual_sim_time = current_time_step + (i*self.dt)
+            self.data_handler.update_time(actual_sim_time)            
+             
+            # step through and update the pursuers
+            if self.use_pursuers:
+                #loop through pursuers and run PN guidance for each pursuer
+                for p in self.pursuers:
+                    pursuer_state = p.get_info()
+                    
+                    #this is the actual pro nav algorithm
+                    dx = next_state[0] - pursuer_state[0]
+                    dy = next_state[1] - pursuer_state[1]
+                    dz = next_state[2] - pursuer_state[2]
                 
-                #this is the actual pro nav algorithm
-                dx = next_state[0] - pursuer_state[0]
-                dy = next_state[1] - pursuer_state[1]
-                dz = next_state[2] - pursuer_state[2]
-            
-                los = math.atan2(dy, dx)
-                pitch_los = math.atan2(dz, math.sqrt(dx**2 + dy**2))
-                error_pitch = pitch_los - pursuer_state[4]
-                error_los = los - pursuer_state[5]
-                                
-                if error_los > np.deg2rad(20):
-                    vel_cmd = 30
-                else:
-                    vel_cmd = 15
-                
-                #remember that this is in NED frame
-                pitch_cmd = np.clip(error_pitch, -np.deg2rad(20), np.deg2rad(20))
-                roll_cmd = np.clip(error_los, -np.deg2rad(30), np.deg2rad(30))
-                los = np.clip(los, -np.pi, np.pi)
-                pursuer_action = [
-                    roll_cmd*0.2,
-                    -pitch_cmd*0.2,
-                    error_los,
-                    vel_cmd 
-                ]
-                
-                pursuer_next_state = p.rk45(pursuer_state, pursuer_action, self.dt)
-                p.set_info(pursuer_next_state)
-                
-            reward, done = self.__get_evader_reward(next_state)
-            #use other reward function to avoid pursuers
-            # need to also step the pursuers
-        else:
-            reward, done = self.__get_reward(next_state)
+                    los = math.atan2(dy, dx)
+                    pitch_los = math.atan2(dz, math.sqrt(dx**2 + dy**2))
+                    error_pitch = pitch_los - pursuer_state[4]
+                    error_los = los - pursuer_state[5]
+                                    
+                    if error_los > np.deg2rad(20):
+                        vel_cmd = 30
+                    else:
+                        vel_cmd = 15
+                    
+                    #remember that this is in NED frame
+                    pitch_cmd = np.clip(error_pitch, -np.deg2rad(20), np.deg2rad(20))
+                    roll_cmd = np.clip(error_los, -np.deg2rad(30), np.deg2rad(30))
+                    los = np.clip(los, -np.pi, np.pi)
+                    pursuer_action = [
+                        roll_cmd*0.2,
+                        -pitch_cmd*0.2,
+                        error_los,
+                        vel_cmd 
+                    ]
+                    
+                    pursuer_next_state = p.rk45(pursuer_state, pursuer_action, self.dt)
+                    p.set_info(pursuer_next_state)
+                    
+                reward, done = self.__get_evader_reward(next_state)
+                #use other reward function to avoid pursuers
+                # need to also step the pursuers
+            else:
+                reward, done = self.__get_reward(next_state)
         
         self.norm_start_state = self.map_real_observation_to_normalized_observation(
             next_state)
@@ -705,7 +730,6 @@ class SimpleKinematicEnv(gymnasium.Env):
         
         self.time_limit -= 1
         
-        self.data_handler.update_data(self.start_state) 
 
         return observation, reward, done, False, info
         

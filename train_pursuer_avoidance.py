@@ -108,10 +108,10 @@ control_constraints = {
 }
 
 state_constraints = {
-    'x_min': -1000, #-np.inf,
-    'x_max': 1000, #np.inf,
-    'y_min': -1000, #-np.inf,
-    'y_max': 1000, #np.inf,
+    'x_min': -1500, #-np.inf,
+    'x_max': 1500, #np.inf,
+    'y_min': -1500, #-np.inf,
+    'y_max': 1500, #np.inf,
     'z_min': 30,
     'z_max': 100,
     'phi_min':  -np.deg2rad(45),
@@ -139,8 +139,6 @@ gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
                                  use_mpc=True,
                                  flight_dynamics_sim_hz=200,
                                  mpc_controller=mpc_control)
-
-#show all registered environments
 
 #### This is the environment that will be used for training
 env = gym.make('PursuerEnv', 
@@ -183,10 +181,10 @@ if LOAD_MODEL and not CONTINUE_TRAINING:
     model = PPO.load(model_name)    
     model.set_env(env)
     
-    if COMPARE_MODELS:
-        dumb_model = PPO.load(dumb_model_name)
-        dumb_model.set_env(env)
-        print("dumb model loaded")
+    # if COMPARE_MODELS:
+    #     dumb_model = PPO.load(dumb_model_name)
+    #     dumb_model.set_env(env)
+    #     print("dumb model loaded")
     
     print("model loaded")
 elif LOAD_MODEL and CONTINUE_TRAINING:

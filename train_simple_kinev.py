@@ -1,13 +1,15 @@
 import numpy as np
 import gymnasium as gym
 import random 
+import matplotlib.pyplot as plt
+
 from src.models.Plane import Plane
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3 import PPO, A2C, DDPG
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 
-LOAD_MODEL = True
+LOAD_MODEL = False
 TOTAL_TIMESTEPS = 2500000#
 CONTINUE_TRAINING = False
 COMPARE_MODELS = False
@@ -15,8 +17,8 @@ COMPARE_MODELS = False
 control_constraints = {
     'u_phi_min':  -np.deg2rad(45),
     'u_phi_max':   np.deg2rad(45),
-    'u_theta_min':-np.deg2rad(20),
-    'u_theta_max': np.deg2rad(20),
+    'u_theta_min':-np.deg2rad(5),
+    'u_theta_max': np.deg2rad(5),
     'u_psi_min':  -np.deg2rad(45),
     'u_psi_max':   np.deg2rad(45),
     'v_cmd_min':   15,
@@ -29,7 +31,7 @@ state_constraints = {
     'y_min': -3000, #-np.inf,
     'y_max': 3000, #np.inf,
     'z_min': 30,
-    'z_max': 80,
+    'z_max': 100,
     'phi_min':  -np.deg2rad(45),
     'phi_max':   np.deg2rad(45),
     'theta_min':-np.deg2rad(20),
@@ -49,7 +51,7 @@ plane.set_state_space()
 start_state = [0, 0, 50, 0, 0, 0, 18]
 start_state = np.array(start_state)
 
-n_pursuers = 1
+n_pursuers = 2
 env = gym.make('SimpleKinematicEnv',
                control_constraints=control_constraints,
                state_constraints=state_constraints,
@@ -58,8 +60,7 @@ env = gym.make('SimpleKinematicEnv',
                use_random_start = True,
                use_pursuers = True,
                num_pursuers = n_pursuers,
-               ego_plane=plane,
-               )
+               ego_plane=plane)
 check_env(env)
 num_envs = 10
 vec_env = make_vec_env('SimpleKinematicEnv', n_envs=num_envs,
@@ -71,8 +72,7 @@ vec_env = make_vec_env('SimpleKinematicEnv', n_envs=num_envs,
                             'use_random_start':True,
                             'use_pursuers':True,
                             'num_pursuers':n_pursuers,
-                            'ego_plane':plane
-                        })
+                            'ego_plane':plane})
 
 n_steps = 650 * 2 // num_envs
 n_epochs = 10
@@ -127,7 +127,8 @@ print("rand_num", rand_num)
 
 histories = []
 pursuer_histories = []
-for i in range(15):
+n_sims = 25
+for i in range(n_sims):
     print("episode", i)
     obs,info = env.reset()
     reward_history = []
@@ -146,7 +147,6 @@ for i in range(15):
     pursuer_histories.append(env.pursuers)
     # pursuer_histories.append(env.pursu)
     
-import matplotlib.pyplot as plt
 history = env.data_handler
 fig, ax = plt.subplots()
 ax.plot(reward_history)
