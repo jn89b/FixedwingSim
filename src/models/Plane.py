@@ -22,6 +22,9 @@ class DataHandler():
         self.yaw.append(info_array[5])
         self.u.append(info_array[6])
         # self.time.append(info_array[7])
+        
+    def update_time(self, time:float) -> None:
+        self.time.append(time)
 
 class Plane():
     def __init__(self, 
@@ -48,6 +51,9 @@ class Plane():
     def set_info(self, state_info:np.ndarray) -> None:
         self.state_info = state_info
         self.data_handler.update_data(state_info)
+    
+    def set_time(self, time:float) -> None:
+        self.data_handler.update_time(time)
     
     def get_info(self) -> np.ndarray:
         return self.state_info

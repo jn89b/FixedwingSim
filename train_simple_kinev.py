@@ -21,8 +21,8 @@ control_constraints = {
     'u_theta_max': np.deg2rad(5),
     'u_psi_min':  -np.deg2rad(45),
     'u_psi_max':   np.deg2rad(45),
-    'v_cmd_min':   15,
-    'v_cmd_max':   30
+    'v_cmd_min':   12,
+    'v_cmd_max':   25
 }
 
 state_constraints = {
@@ -51,7 +51,7 @@ plane.set_state_space()
 start_state = [0, 0, 50, 0, 0, 0, 18]
 start_state = np.array(start_state)
 
-n_pursuers = 2
+n_pursuers = 3
 env = gym.make('SimpleKinematicEnv',
                control_constraints=control_constraints,
                state_constraints=state_constraints,
@@ -62,7 +62,7 @@ env = gym.make('SimpleKinematicEnv',
                num_pursuers = n_pursuers,
                ego_plane=plane)
 check_env(env)
-num_envs = 10
+num_envs = 128
 vec_env = make_vec_env('SimpleKinematicEnv', n_envs=num_envs,
                         env_kwargs={
                             'control_constraints':control_constraints,
@@ -76,7 +76,7 @@ vec_env = make_vec_env('SimpleKinematicEnv', n_envs=num_envs,
 
 n_steps = 650 * 2 // num_envs
 n_epochs = 10
-batch_size = 100
+batch_size = n_steps*num_envs#100
 model_name = "kinematic_avoidance_ppo_pessimistic_in_progress"
 model_name ="early_model"
 #model_name = "kinematic_avoidance_ppo_pessimistic"

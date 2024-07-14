@@ -662,14 +662,14 @@ class SimpleKinematicEnv(gymnasium.Env):
         real_action = self.map_normalized_action_to_real_action(action)
         #set pitch to 0 for now to see what happens
         # real_action[1] = 0
-        next_state = self.ego_plane.rk45(self.start_state, 
-                                         real_action, 
-                                         self.dt)
+        # next_state = self.ego_plane.rk45(self.start_state, 
+        #                                  real_action, 
+        #                                  self.dt)
         # to make the control more smooth we will update the decision input
         # every 1 second
-        every_one_second = int(0.5/self.dt)
+        every_one_second = int(1/self.dt)
         current_time_step = self.time_constant - self.time_limit
-        
+        next_state = self.start_state
         for i in range(every_one_second):
             next_state = self.ego_plane.rk45(next_state, 
                                              real_action, 
