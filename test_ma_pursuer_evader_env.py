@@ -3,6 +3,7 @@ Sanity check for the MA_PursuerEvaderEnv environment.
 https://pettingzoo.farama.org/tutorials/custom_environment/1-project-structure/
 """
 import numpy as np
+import matplotlib.pyplot as plt
 from src.fixedwing_sim.envs.ma_pursuer_evader_env import PursuerEvaderEnv
 
 pursuer_control_constraints = {
@@ -74,9 +75,21 @@ env = PursuerEvaderEnv(
 # Reset the environment to start a new episode
 observations = env.reset()
 
+N_steps = 10
 # Run a simple simulation loop
-for step in range(10):  # Run for 10 steps as an example
-    actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+for step in range(N_steps):  # Run for 10 steps as an example
+    #actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+    
+    # do an idiot check to make sure the environment is working as expected
+    # let's check make them fly straight
+    actions = {}
+    for agent, action in env.agents.items():
+        print(f"Agent: {agent}")
+        #print("Action:", action)
+        # this has to be normalized
+        current_action = np.array([0.0, 0.0, 0.0, 0])
+        actions[agent] = current_action
+    
     # actions = {}
     # for agent in env.agents:
     #     print(f"Agent: {agent}")
@@ -101,3 +114,11 @@ for step in range(10):  # Run for 10 steps as an example
 
 # Close the environment
 env.close()
+
+# 3D plot of the environment
+fig,ax = plt.subplots(subplot_kw={'projection':'3d'})
+for agent, obs in observations.items():
+    x, y, z = obs[:3]
+    ax.plot([x], [y], [z], 'o', label=agent)
+ax.legend()
+plt.show()
