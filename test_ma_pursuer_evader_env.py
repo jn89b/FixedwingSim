@@ -64,7 +64,7 @@ evader_state_constraints = {
 
 # Create an instance of the environment
 env = PursuerEvaderEnv(
-    n_pursuers=2,
+    n_pursuers=1,
     n_evaders=1,
     pursuer_control_constraints=pursuer_control_constraints,
     evader_control_constraints=evader_control_constraints,
@@ -75,7 +75,7 @@ env = PursuerEvaderEnv(
 # Reset the environment to start a new episode
 observations = env.reset()
 
-N_steps = 10
+N_steps = 20
 # Run a simple simulation loop
 for step in range(N_steps):  # Run for 10 steps as an example
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}
@@ -117,8 +117,16 @@ env.close()
 
 # 3D plot of the environment
 fig,ax = plt.subplots(subplot_kw={'projection':'3d'})
-for agent, obs in observations.items():
-    x, y, z = obs[:3]
-    ax.plot([x], [y], [z], 'o', label=agent)
+for name, agent in env.agents.items():
+    x = agent.data_handler.x
+    y = agent.data_handler.y
+    z = agent.data_handler.z
+    ax.scatter(x[0], y[0], z[0], label=name + ' start')
+    ax.plot(x, y, z, label=name)
+    
+    
+# for agent, obs in observations.items():
+#     x, y, z = obs[:3]
+#     ax.plot([x], [y], [z], 'o', label=agent)
 ax.legend()
 plt.show()
