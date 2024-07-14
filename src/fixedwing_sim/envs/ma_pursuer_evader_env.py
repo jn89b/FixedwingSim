@@ -49,8 +49,9 @@ class PursuerEvaderEnv(AECEnv):
         self.dt = dt
         #used to determine the number of steps in a second for input frequency of the agents
         self.every_one_second = int(1/dt)
-        self.rl_time_limit = rl_time_limit
-
+        self.rl_time_limit = rl_time_limit 
+        self.rl_time_constant = rl_time_limit
+        
         self.init_agents()
         self.init_agents_action_space()
         self.init_agents_observation_space()
@@ -371,9 +372,11 @@ class PursuerEvaderEnv(AECEnv):
         if not actions:
             raise ValueError("Actions cannot be None")
         
+        self.rl_time_limit -= 1
+        
+
         # make pursuer move and then evader move
         for agent_name, action in actions.items():
-    
             if 'pursuer' in agent_name:
                 real_action = self.map_normalized_action_to_real_action(
                     action, self.pursuer_control_constraints)
@@ -393,32 +396,8 @@ class PursuerEvaderEnv(AECEnv):
                 current_agent.set_info(next_state)
                 actual_sim_time = current_time_step + i * self.dt
                 current_agent.set_time(actual_sim_time)
-            
-        # compute rewards for pursuer and evaders
-        ## do if and elif here to check for termination
-        # check if pursuer has captured evader
-        # if so we will end the episode and reward the pursuer 
-        # check if evader has lived for a certain amount of time
-        # if so we will end the episode and reward the evader
-        # set truncations -> reached maximum number of steps
-        rewards = {}
-        truncations = {}
-        terminations = {}
-        for agent_name, agent in self.agents.items():
-            if 'pursuer' in agent_name:
-                pursuer = agent
-                rewards[agent_name] = 1
-                truncations[agent_name] = False
-                terminations[agent_name] = False
-            else:
-                'evader' in agent_name
-                evader = agent
-                rewards[agent_name] = -1
-                truncations[agent_name] = False
-                terminations[agent_name] = False
-        
+                    
         # set observations 
-        observations = {}
         infos = {}
         for agent_name, agent in self.agents.items():
             if 'pursuer' in agent_name:
@@ -491,10 +470,35 @@ class PursuerEvaderEnv(AECEnv):
                                                               np.array([relative_distance,
                                                                         relative_velocity,
                                                                         relative_heading]))    
-                
-            # observations[agent_name] = self.map_real_observation_to_normalized_observation(
-            #     agent.get_info(), self.pursuer_observation_constraints)
-            # infos[agent_name] = self.agents[agent_name].get_info()
+        # compute rewards for pursuer and evaders
+        ## do if and elif here to check for termination
+        # check if pursuer has captured evader
+        # if so we will end the episode and reward the pursuer 
+        # check if evader has lived for a certain amount of time
+        # if so we will end the episode and reward the evader
+        # set truncations -> reached maximum number of steps
+        
+        # for this terminations and truncations will be the same
+        if self.rl_time_limit == 0:
+            END_EPISODE = True
+        else:
+            END_EPISODE = False
+            
+        rewards = {}
+        truncations = {}
+        terminations = {}
+        for agent_name, agent in self.agents.items():
+            if 'pursuer' in agent_name:
+                pursuer = agent
+                rewards[agent_name] = 1
+                truncations[agent_name] = END_EPISODE
+                terminations[agent_name] = False
+            else:
+                'evader' in agent_name
+                evader = agent
+                rewards[agent_name] = -1
+                truncations[agent_name] = END_EPISODE
+                terminations[agent_name] = False
         
         return self.observations, rewards, terminations, truncations, infos
         
@@ -513,20 +517,23 @@ class PursuerEvaderEnv(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
+        self.init_agents()  
+        self.init_agents_action_space()
+        self.init_agents_observation_space()
+        self.rl_time_limit = self.rl_time_constant
+        # self.rewards = {agent: 0 for agent in self.agents}
+        # self._cumulative_rewards = {agent: 0 for agent in self.agents}
+        # self.terminations = {agent: False for agent in self.agents}
+        # self.truncations = {agent: False for agent in self.agents}
+        # self.infos = {agent: {} for agent in self.agents}
+        # self.agent_selection = None
         
-        self.rewards = {agent: 0 for agent in self.agents}
-        self._cumulative_rewards = {agent: 0 for agent in self.agents}
-        self.terminations = {agent: False for agent in self.agents}
-        self.truncations = {agent: False for agent in self.agents}
-        self.infos = {agent: {} for agent in self.agents}
-        self.agent_selection = None
+        # self.state = {}
+        # self.observations = {}
         
-        self.state = {}
-        self.observations = {}
-        
-        for agent in self.agents:
-            self.state[agent] = None
-            self.observations[agent] = None
+        # for agent in self.agents:
+        #     self.state[agent] = None
+        #     self.observations[agent] = None
             
         return self.observations
         

@@ -1,6 +1,24 @@
 """
 Sanity check for the MA_PursuerEvaderEnv environment.
 https://pettingzoo.farama.org/tutorials/custom_environment/1-project-structure/
+
+- Next thing to do:
+    - Implement the environment - DONE
+    - Implement the agents - DONE
+    - Implement the reward function
+    - Implement the training loop
+    - Implement the evaluation loop
+    - Implement the visualization loop
+    - Implement the saving and loading of models
+    - Implement the saving and loading of data
+    - Implement the saving and loading of logs
+    - Implement the saving and loading of plots
+    - Implement the saving and loading of videos
+    - Implement the saving and loading of gifs
+    - Implement the saving and loading of audio
+    - Implement the saving and loading of text
+    - Implement the saving and loading of images
+
 """
 import numpy as np
 import matplotlib.pyplot as plt
