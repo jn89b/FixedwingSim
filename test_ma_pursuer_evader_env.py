@@ -93,20 +93,20 @@ env = PursuerEvaderEnv(
 # Reset the environment to start a new episode
 observations = env.reset()
 
-N_steps = 20
+N_steps = 100
 # Run a simple simulation loop
 for step in range(N_steps):  # Run for 10 steps as an example
-    #actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+    actions = {agent: env.action_space(agent).sample() for agent in env.agents}
     
     # do an idiot check to make sure the environment is working as expected
     # let's check make them fly straight
-    actions = {}
-    for agent, action in env.agents.items():
-        print(f"Agent: {agent}")
-        #print("Action:", action)
-        # this has to be normalized
-        current_action = np.array([0.0, 0.0, 0.0, 0])
-        actions[agent] = current_action
+    # actions = {}
+    # for agent, action in env.agents.items():
+    #     # print(f"Agent: {agent}")
+    #     #print("Action:", action)
+    #     # this has to be normalized
+    #     current_action = np.array([0.0, 0.0, 0.0, 0])
+    #     actions[agent] = current_action
     
     # actions = {}
     # for agent in env.agents:
@@ -127,8 +127,13 @@ for step in range(N_steps):  # Run for 10 steps as an example
     print("Infos:", infos)
 
     # Check for termination condition
-    if all(terminations.values()):
+    # if all(terminations.values()):
+    #     break
+    
+    if any(terminations.values()):
         break
+# this will sum the rewards of all agents
+overall_rewards = sum(rewards.values())
 
 # Close the environment
 env.close()
@@ -141,10 +146,10 @@ for name, agent in env.agents.items():
     z = agent.data_handler.z
     ax.scatter(x[0], y[0], z[0], label=name + ' start')
     ax.plot(x, y, z, label=name)
-    
-    
-# for agent, obs in observations.items():
-#     x, y, z = obs[:3]
-#     ax.plot([x], [y], [z], 'o', label=agent)
 ax.legend()
+
+#plot the rewards
+fig, ax = plt.subplots()
+for k,v in env.agents.items():
+    ax.plot(v.data_handler.rewards, label=k)
 plt.show()

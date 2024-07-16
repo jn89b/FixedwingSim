@@ -12,6 +12,7 @@ class DataHandler():
         self.yaw = []
         self.u = []
         self.time = []
+        self.rewards = []
         
     def update_data(self,info_array:np.ndarray):
         self.x.append(info_array[0])
@@ -22,6 +23,9 @@ class DataHandler():
         self.yaw.append(info_array[5])
         self.u.append(info_array[6])
         # self.time.append(info_array[7])
+        
+    def update_reward(self, reward:float) -> None:
+        self.rewards.append(reward)
         
     def update_time(self, time:float) -> None:
         self.time.append(time)
@@ -158,6 +162,8 @@ class Plane():
             [self.states, self.controls], 
             [self.z_dot])
         
+    def update_reward(self, reward:float) -> None:
+        self.data_handler.update_reward(reward)
         
     def rk45(self, x, u, dt, use_numeric:bool=True):
         """

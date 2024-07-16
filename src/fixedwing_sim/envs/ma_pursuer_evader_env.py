@@ -193,14 +193,26 @@ class PursuerEvaderEnv(AECEnv):
     def compute_relative_heading(self, ego:Plane, other:Plane) -> float:
         """
         Computes the relative heading between the ego and another plane
+        this will be used to compute the dot product
         """
-        relative_heading = np.arctan2(ego.get_info()[1] - other.get_info()[1],
-                                      ego.get_info()[0] - other.get_info()[0])
+        # relative_heading = np.arctan2(ego.get_info()[1] - other.get_info()[1],
+        #                               ego.get_info()[0] - other.get_info()[0])
+        ego_heading = ego.get_info()[5]
+        other_heading = other.get_info()[5]
+        ego_unit_vector = np.array([np.cos(ego_heading), np.sin(ego_heading)])
+        other_unit_vector = np.array([np.cos(other_heading), np.sin(other_heading)])
+        
+        relative_heading = np.dot(ego_unit_vector, other_unit_vector)
         return relative_heading
     
     def set_start_positions(self, start_positions:list, index:int, 
-                            num_required:int, obs_constraints:dict,) -> np.ndarray:
+                            num_required:int, obs_constraints:dict,
+                            use_spawn_constraint:bool=False,
+                            ref_position:np.ndarray=None) -> np.ndarray:
         """
+        Spawns the pursuers and evaders in the environment
+        If use_spawn_constraint is set to True then the pursuers and evaders
+        will spawn at a minimum distance from the reference position
         """
         if start_positions:
             if len(start_positions) != num_required:
@@ -261,7 +273,9 @@ class PursuerEvaderEnv(AECEnv):
         
         self.action_spaces = {agent: None for agent in self.agents}
         self.observation_spaces = {agent: None for agent in self.agents}
-        
+        self.infos = {agent: None for agent in self.agents}
+        self.observations = {agent: None for agent in self.agents}
+        self.rewards = {agent: 0 for agent in self.agents}
         
     def init_agents_action_space(self) -> None:
         """
@@ -277,6 +291,24 @@ class PursuerEvaderEnv(AECEnv):
             name = 'evader_{}'.format(i)
             self.action_spaces[name] = self.set_action_space(
                 self.evader_control_constraints)
+        
+    def is_out_of_bounds(self, ego:Plane, state_constraints:dict) -> bool:
+        """
+        """
+        ego_position = ego.get_info()[:3]
+        if ego_position[0] < state_constraints['x_min'] or ego_position[0] > state_constraints['x_max']:
+            return True
+        elif ego_position[1] < state_constraints['y_min'] or ego_position[1] > state_constraints['y_max']:
+            return True
+        elif ego_position[2] < state_constraints['z_min'] or ego_position[2] > state_constraints['z_max']:
+            return True
+        
+        return False
+        
+    def compute_evader_reward(self, pursuer:Plane, evader:Plane) -> float:
+        """
+        This function will compute the reward for the evader
+        """
         
     def set_action_space(self, control_constraints:dict) -> spaces.Box:
         """
@@ -350,11 +382,47 @@ class PursuerEvaderEnv(AECEnv):
         
         return observation_space
     
-    def get_relative_observations(self, agent_name:str) -> np.ndarray:
+    def get_relative_distance_obs(self, agent_name:str,
+                                  get_norm_obs:bool=False) -> np.ndarray:
         """
         This function will return the relative observations of the agent
         """
-        return self.observations[agent_name]
+        if get_norm_obs:
+            observations = self.observations[agent_name]
+            #since we have x,y,z,roll,pitch,yaw,airspeed
+            relative_observations = observations[7:]
+            #get the 0 and every other 3rd value
+            relative_position = relative_observations[0::3]
+            return relative_position
+        
+        observations = self.infos[agent_name]
+        #since we have x,y,z,roll,pitch,yaw,airspeed
+        relative_observations = observations[7:]
+        #get the 0 and every other 3rd value
+        relative_position = relative_observations[0::3]
+        return relative_position
+    
+    def get_relative_velocity_obs(self, agent_name:str) -> np.ndarray:
+        """
+        This function will return the relative velocity of the agent
+        """
+        observations = self.infos[agent_name]
+        #since we have x,y,z,roll,pitch,yaw,airspeed
+        relative_observations = observations[7:]
+        #get the 1 and every other 3rd value
+        relative_velocity = relative_observations[1::3]
+        return relative_velocity
+    
+    def get_relative_heading_obs(self, agent_name:str) -> np.ndarray:
+        """
+        This function will return the relative heading of the agent
+        """
+        observations = self.infos[agent_name]
+        #since we have x,y,z,roll,pitch,yaw,airspeed
+        relative_observations = observations[7:]
+        #get the 2 and every other 3rd value
+        relative_heading = relative_observations[2::3]
+        return relative_heading
     
     def step(self, actions:dict) -> tuple:
         """
@@ -373,8 +441,6 @@ class PursuerEvaderEnv(AECEnv):
             raise ValueError("Actions cannot be None")
         
         self.rl_time_limit -= 1
-        
-
         # make pursuer move and then evader move
         for agent_name, action in actions.items():
             if 'pursuer' in agent_name:
@@ -404,7 +470,8 @@ class PursuerEvaderEnv(AECEnv):
                 norm_observation = self.map_real_observation_to_normalized_observation(
                     agent.get_info(), self.pursuer_observation_constraints)
                 self.observations[agent_name] = norm_observation
-                infos[agent_name] = agent.get_info()
+                # infos[agent_name] = 
+                # print("Info before:", infos[agent_name])
                 
                 #include the relative distance, relative velocity, and relative heading of the evader
                 #TODO: Need to refactor this code 
@@ -430,18 +497,15 @@ class PursuerEvaderEnv(AECEnv):
                                                                     np.array([relative_norm_distance,
                                                                             relative_norm_velocity,
                                                                             relative_norm_heading]))
-                                                
-                        self.infos[agent_name] = np.append(self.infos[agent_name],
+                        self.infos[agent_name] = np.append(agent.get_info(),
                                                               np.array([relative_distance,
                                                                         relative_velocity,
                                                                         relative_heading]))
-                        
             else:
                 'evader' in agent_name
                 norm_observation = self.map_real_observation_to_normalized_observation(
                     agent.get_info(), self.evader_observation_constraints)
                 self.observations[agent_name] = norm_observation
-                infos[agent_name] = agent.get_info()
                 
                 for k,v in self.agents.items():
                     if 'pursuer' in k:
@@ -466,7 +530,7 @@ class PursuerEvaderEnv(AECEnv):
                                                                             relative_norm_velocity,
                                                                             relative_norm_heading]))
                                                 
-                        self.infos[agent_name] = np.append(self.infos[agent_name],
+                        self.infos[agent_name] = np.append(agent.get_info(),
                                                               np.array([relative_distance,
                                                                         relative_velocity,
                                                                         relative_heading]))    
@@ -479,28 +543,83 @@ class PursuerEvaderEnv(AECEnv):
         # set truncations -> reached maximum number of steps
         
         # for this terminations and truncations will be the same
-        if self.rl_time_limit == 0:
-            END_EPISODE = True
+        """
+        We want to end the episode if:
+            - The time limit has been reached -> evader survived
+            - The pursuer has captured the evader -> evader did not survive
+            - If the pursuer is out of bounds -> evader gets a huge reward
+            - If the evader is out of bounds -> pursuer gets a huge reward
+        """
+        if self.rl_time_limit <= 0:
+            ROUND_END = True
+            evader_survived_round = True
         else:
-            END_EPISODE = False
+            ROUND_END = False
+            evader_survived_round = False
             
         rewards = {}
         truncations = {}
         terminations = {}
+        out_of_bounds_penalty = np.array([-100])
+        huge_payout = np.array([100])
+        
         for agent_name, agent in self.agents.items():
+            #pursuer is negative
             if 'pursuer' in agent_name:
                 pursuer = agent
-                rewards[agent_name] = 1
-                truncations[agent_name] = END_EPISODE
-                terminations[agent_name] = False
+                relative_distance_observation = self.get_relative_distance_obs(agent_name)
+                if self.is_out_of_bounds(pursuer, self.pursuer_observation_constraints):
+                    rewards[agent_name] = out_of_bounds_penalty
+                    ROUND_END = True
+                    print("Out of bounds")
+                elif evader_survived_round:
+                    rewards[agent_name] = -huge_payout
+                elif np.any(relative_distance_observation <= self.pursuer_capture_distance):
+                    rewards[agent_name] = huge_payout
+                    ROUND_END = True
+                else:  
+                    # compute a reward function for the pursuer based on relative distance and heading
+                    rel_norm_distance = self.get_relative_distance_obs(agent_name, get_norm_obs=True)
+                    rel_norm_heading = self.get_relative_heading_obs(agent_name)
+                    #for the pursuer we want to minimize the distance and get the maximum dot product
+                    rewards[agent_name] = -rel_norm_distance + rel_norm_heading
+                    
+                self.rewards[agent_name] = rewards[agent_name]
+                pursuer.update_reward(rewards[agent_name])
+                truncations[agent_name]  = ROUND_END
+                terminations[agent_name] = ROUND_END
+            
             else:
+                #evader is positive
                 'evader' in agent_name
                 evader = agent
-                rewards[agent_name] = -1
-                truncations[agent_name] = END_EPISODE
-                terminations[agent_name] = False
+                # rewards[agent_name] = -1
+                relative_distance_observation = self.get_relative_distance_obs(agent_name)
+                if self.is_out_of_bounds(evader, self.evader_observation_constraints):
+                    rewards[agent_name] = out_of_bounds_penalty
+                    ROUND_END = True
+                    print("Out of bounds")
+                elif evader_survived_round:
+                    rewards[agent_name] = huge_payout
+                    ROUND_END = True
+                #means the pursuer has captured the evader
+                elif np.any(relative_distance_observation <= self.pursuer_capture_distance):
+                    rewards[agent_name] = -huge_payout
+                    ROUND_END = True
+                else:
+                    # compute a reward function for the evader based on relative distance and heading
+                    rel_norm_distance = self.get_relative_distance_obs(agent_name, get_norm_obs=True)
+                    rel_norm_heading = self.get_relative_heading_obs(agent_name)
+                    
+                    #for the evader we want to maximize the distance and get the minimum dot product
+                    rewards[agent_name] = rel_norm_distance - rel_norm_heading
+                    self.rewards[agent_name] = rewards[agent_name]
+                    
+                evader.update_reward(rewards[agent_name])    
+                truncations[agent_name] = ROUND_END
+                terminations[agent_name] = ROUND_END
         
-        return self.observations, rewards, terminations, truncations, infos
+        return self.observations, rewards, terminations, truncations, self.infos
         
     
     def reset(self, seed=None, options=None):
@@ -521,19 +640,19 @@ class PursuerEvaderEnv(AECEnv):
         self.init_agents_action_space()
         self.init_agents_observation_space()
         self.rl_time_limit = self.rl_time_constant
-        # self.rewards = {agent: 0 for agent in self.agents}
-        # self._cumulative_rewards = {agent: 0 for agent in self.agents}
-        # self.terminations = {agent: False for agent in self.agents}
-        # self.truncations = {agent: False for agent in self.agents}
-        # self.infos = {agent: {} for agent in self.agents}
+        self.rewards = {agent: 0 for agent in self.agents}
+        self._cumulative_rewards = {agent: 0 for agent in self.agents}
+        self.terminations = {agent: False for agent in self.agents}
+        self.truncations = {agent: False for agent in self.agents}
+        self.infos = {agent: {} for agent in self.agents}
         # self.agent_selection = None
         
-        # self.state = {}
-        # self.observations = {}
+        self.state = {}
+        self.observations = {}
         
-        # for agent in self.agents:
-        #     self.state[agent] = None
-        #     self.observations[agent] = None
+        for agent in self.agents:
+            self.state[agent] = None
+            self.observations[agent] = None
             
         return self.observations
         
