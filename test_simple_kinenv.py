@@ -67,8 +67,12 @@ obs, info = env.reset()
 reward_history = []
 time_history = []
 for i in range(N):
+    env.reset()
+
+for i in range(N):
     action = env.action_space.sample()
     # action = np.array([0.0, -0.5, 0, 0])
+    env.reset()
     obs, reward, done, _, info = env.step(action)
     #print(f"Action: {action}, Reward: {reward}, Done: {done}")
     reward_history.append(reward)

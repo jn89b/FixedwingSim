@@ -1,0 +1,42 @@
+Failure # 1 (occurred at 2024-07-16_21-41-13)
+[36mray::PPO.train()[39m (pid=639398, ip=172.18.69.9, actor_id=0b0464deb30593abfaa1963101000000, repr=PPO)
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/tune/trainable/trainable.py", line 331, in train
+    raise skipped from exception_cause(skipped)
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/tune/trainable/trainable.py", line 328, in train
+    result = self.step()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/algorithms/algorithm.py", line 857, in step
+    train_results, train_iter_ctx = self._run_one_training_iteration()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/algorithms/algorithm.py", line 3152, in _run_one_training_iteration
+    training_step_results = self.training_step()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 426, in training_step
+    return self._training_step_old_and_hybrid_api_stacks()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 538, in _training_step_old_and_hybrid_api_stacks
+    train_batch = synchronous_parallel_sample(
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/execution/rollout_ops.py", line 100, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_worker(
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/env/env_runner_group.py", line 899, in foreach_worker
+    _handle_remote_call_result_errors(
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/env/env_runner_group.py", line 1237, in _handle_remote_call_result_errors
+    raise r.get()
+ray.exceptions.RayTaskError(AttributeError): [36mray::RolloutWorker.apply()[39m (pid=639516, ip=172.18.69.9, actor_id=d163d8a85f82e0fa4b4be81801000000, repr=<ray.rllib.evaluation.rollout_worker.RolloutWorker object at 0x7ff6987ad6c0>)
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/utils/actor_manager.py", line 192, in apply
+    raise e
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/utils/actor_manager.py", line 181, in apply
+    return func(self, *args, **kwargs)
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/execution/rollout_ops.py", line 102, in <lambda>
+    (lambda w: w.sample(**random_action_kwargs))
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/evaluation/rollout_worker.py", line 676, in sample
+    batches = [self.input_reader.next()]
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/evaluation/sampler.py", line 91, in next
+    batches = [self.get_data()]
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/evaluation/sampler.py", line 273, in get_data
+    item = next(self._env_runner)
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 348, in run
+    outputs = self.step()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 367, in step
+    ) = self._base_env.poll()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/env/multi_agent_env.py", line 634, in poll
+    ) = env_state.poll()
+  File "/home/justin/coding_projects/FixedwingSim/venv/lib/python3.10/site-packages/ray/rllib/env/multi_agent_env.py", line 867, in poll
+    for ag in observations.keys():
+AttributeError: 'str' object has no attribute 'keys'

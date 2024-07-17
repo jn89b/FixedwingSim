@@ -96,17 +96,17 @@ observations = env.reset()
 N_steps = 100
 # Run a simple simulation loop
 for step in range(N_steps):  # Run for 10 steps as an example
-    actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+    # actions = {agent: env.action_space(agent).sample() for agent in env.agents}
     
     # do an idiot check to make sure the environment is working as expected
     # let's check make them fly straight
-    # actions = {}
-    # for agent, action in env.agents.items():
-    #     # print(f"Agent: {agent}")
-    #     #print("Action:", action)
-    #     # this has to be normalized
-    #     current_action = np.array([0.0, 0.0, 0.0, 0])
-    #     actions[agent] = current_action
+    actions = {}
+    for agent, action in env.agents.items():
+        # print(f"Agent: {agent}")
+        #print("Action:", action)
+        # this has to be normalized
+        current_action = np.array([0.0, 0.0, 0.0, 0])
+        actions[agent] = current_action
     
     # actions = {}
     # for agent in env.agents:

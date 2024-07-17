@@ -1,15 +1,58 @@
 """
 This utilizes the Petting Zoo api to create a multi-agent environment for the pursuer-evader scenario.
+https://clementbm.github.io/project/2023/03/29/reinforcement-learning-connect-four-rllib.html
 """
 
 import functools
 import numpy as np
 
 from pettingzoo import AECEnv
+from pettingzoo import ParallelEnv
+from pettingzoo.utils import parallel_to_aec, wrappers
+
 from gymnasium import spaces, logger
 from src.models.Plane import Plane
+from copy import copy
 
-class PursuerEvaderEnv(AECEnv):
+
+def raw_env(render_mode=None, n_pursuers:int=1,
+                 n_evaders:int=1,
+                 pursuer_control_constraints:dict=None,
+                 evader_control_constraints:dict=None,
+                 pursuer_observation_constraints:dict=None,
+                 evader_observation_constraints:dict=None,
+                 pursuer_capture_distance:float=20.0,
+                 pursuer_min_spawning_distance:float=100.0,
+                 pursuers_start_positions:list=None,
+                 evader_start_positions:list=None,
+                 dt:float=0.1,
+                 rl_time_limit:int=100):
+    """
+    To support the AEC API, the raw_env() function just uses the from_parallel
+    function to convert from a ParallelEnv to an AEC env
+    """
+    #set kwargs to the PursuerEvaderEnv
+    env = PursuerEvaderEnv(
+        n_pursuers=n_pursuers,
+        n_evaders=n_evaders,
+        pursuer_control_constraints=pursuer_control_constraints,
+        evader_control_constraints=evader_control_constraints,
+        pursuer_observation_constraints=pursuer_observation_constraints,
+        evader_observation_constraints=evader_observation_constraints,
+        pursuer_capture_distance=pursuer_capture_distance,
+        pursuer_min_spawning_distance=pursuer_min_spawning_distance,
+        pursuers_start_positions=pursuers_start_positions,
+        evader_start_positions=evader_start_positions,
+        dt=dt,
+        rl_time_limit=rl_time_limit
+    )
+    
+    # env = PursuerEvaderEnv(render_mode=render_mode)
+    env = parallel_to_aec(env)
+    return env
+
+
+class PursuerEvaderEnv(ParallelEnv):
     """
     Creates a multi-agent environment where there can be n pursuers and 
     for now 1 evader.
@@ -17,6 +60,9 @@ class PursuerEvaderEnv(AECEnv):
     Reward function will be the reverse of one so if one is positive
     the other will be negative (like mini-max)
     """
+    metadata = {"render.modes": ["human", "rgb_array"],
+                "name": "pursuer_evader_env"}
+
     def __init__(self,
                  n_pursuers:int=1,
                  n_evaders:int=1,
@@ -51,10 +97,15 @@ class PursuerEvaderEnv(AECEnv):
         self.every_one_second = int(1/dt)
         self.rl_time_limit = rl_time_limit 
         self.rl_time_constant = rl_time_limit
-        
         self.init_agents()
         self.init_agents_action_space()
         self.init_agents_observation_space()
+    
+    def observation_space(self, agent: str) -> spaces.Space:
+        return self.observation_spaces[agent]
+    
+    def action_space(self, agent: str) -> spaces.Space:
+        return self.action_spaces[agent]
     
     def map_real_to_norm(self, norm_max:float, norm_min:float, real_val:float) -> float:
         """I can probably abstract this out to a utility function"""
@@ -107,8 +158,9 @@ class PursuerEvaderEnv(AECEnv):
         v = self.norm_map_to_real(state_constraints['airspeed_max'],
                                   state_constraints['airspeed_min'],
                                   v_norm)
-        
-        return np.array([x, y, z, roll, pitch, yaw, v])
+        real_obs = np.array([x, y, z, roll, pitch, yaw, v])
+        return real_obs.astype(np.float32)
+    
     
     def map_real_observation_to_normalized_observation(self, 
             observation:np.ndarray, state_constraints:dict) -> np.ndarray:
@@ -152,7 +204,10 @@ class PursuerEvaderEnv(AECEnv):
                                        state_constraints['airspeed_min'],
                                        v)
         
-        return np.array([x_norm, y_norm, z_norm, roll_norm, pitch_norm, yaw_norm, v_norm])
+        norm_obs = np.array([x_norm, y_norm, z_norm, roll_norm, pitch_norm, yaw_norm, v_norm])
+        #make sure to return as float32
+        return norm_obs.astype(np.float32)
+        
     
     def map_normalized_action_to_real_action(self, 
             action:np.ndarray, control_constraints:dict) -> np.ndarray:
@@ -173,7 +228,9 @@ class PursuerEvaderEnv(AECEnv):
                                             control_constraints['v_cmd_min'],
                                             action[3])
         
-        return np.array([roll_cmd, pitch_cmd, yaw_cmd, airspeed_cmd])
+        real_action = np.array([roll_cmd, pitch_cmd, yaw_cmd, airspeed_cmd])
+        #return as type float32
+        return real_action.astype(np.float32)
     
     
     def compute_relative_distance(self, ego:Plane, other:Plane) -> float:
@@ -226,6 +283,8 @@ class PursuerEvaderEnv(AECEnv):
                                  len(start))
             
             actual_states = np.array(start)
+            actual_states = actual_states.astype(np.float32)
+            print("Actual States:", actual_states)
             return actual_states
         else:
             x = np.random.uniform(obs_constraints['x_min'],
@@ -243,39 +302,46 @@ class PursuerEvaderEnv(AECEnv):
             v = np.random.uniform(obs_constraints['airspeed_min'],
                                     obs_constraints['airspeed_max'])
             actual_states = np.array([x, y, z, roll, pitch, yaw, v])
+            #return as float32
+            actual_states = actual_states.astype(np.float32)
             return actual_states
     
     def init_agents(self) -> None:
         """
         Creates a dictionary of agents in the environment for pursuers and evaders
         """
-        self.agents = {}
+        self.agents_dict = {}
+        self.possible_agents = []
+        self.agents = []
         #TODO: Need to refactor this code, this is code duplication for pursuers and evaders
         for i in range(self.n_pursuers):
             plane = Plane()
             plane.set_state_space()
-
+            name = 'pursuer_{}'.format(i)
             actual_states = self.set_start_positions(self.pursuers_start_positions, 
                                                      i, self.n_pursuers, 
                                                      self.pursuer_observation_constraints)
             
             plane.set_info(actual_states)
-            self.agents['pursuer_{}'.format(i)] = plane    
+            self.agents_dict[name] = plane    
+            self.possible_agents.append(name)
             
         for i in range(self.n_evaders):
             plane = Plane()
             plane.set_state_space()
+            name = 'evader_{}'.format(i)
             actual_states = self.set_start_positions(self.evader_start_positions,
                                                         i, self.n_evaders,
                                                         self.evader_observation_constraints)
             plane.set_info(actual_states)
-            self.agents['evader_{}'.format(i)] = plane
+            self.agents_dict[name] = plane
+            self.possible_agents.append(name)
         
-        self.action_spaces = {agent: None for agent in self.agents}
-        self.observation_spaces = {agent: None for agent in self.agents}
-        self.infos = {agent: None for agent in self.agents}
-        self.observations = {agent: None for agent in self.agents}
-        self.rewards = {agent: 0 for agent in self.agents}
+        self.action_spaces = {agent: None for agent in self.agents_dict}
+        self.observation_spaces = {agent: None for agent in self.agents_dict}
+        self.infos = {agent: None for agent in self.agents_dict}
+        self.observations = {agent: None for agent in self.agents_dict}
+        self.rewards = {agent: 0 for agent in self.agents_dict}
         
     def init_agents_action_space(self) -> None:
         """
@@ -368,7 +434,7 @@ class PursuerEvaderEnv(AECEnv):
         n_relative_values = 3 
         for i in range(n_relative_values):
             high_observation.append(1)
-            low_observation.append(-1)
+            low_observation.append(-1) 
         
         if set_for_evader:
             n_relative_values = 3 * self.n_pursuers
@@ -452,7 +518,7 @@ class PursuerEvaderEnv(AECEnv):
                     action, self.evader_control_constraints)  
             
             current_time_step = self.rl_time_limit
-            current_agent = self.agents[agent_name]
+            current_agent = self.agents_dict[agent_name]
 
             #this is a working variable going to be used to store the next state
             next_state = current_agent.get_info()
@@ -463,9 +529,10 @@ class PursuerEvaderEnv(AECEnv):
                 actual_sim_time = current_time_step + i * self.dt
                 current_agent.set_time(actual_sim_time)
                     
-        # set observations 
-        infos = {}
-        for agent_name, agent in self.agents.items():
+        # set observations
+        # self.observations = {a: None for a in self.agents_dict} 
+        # self.infos = {a:None for a in self.agents_dict}
+        for agent_name, agent in self.agents_dict.items():
             if 'pursuer' in agent_name:
                 norm_observation = self.map_real_observation_to_normalized_observation(
                     agent.get_info(), self.pursuer_observation_constraints)
@@ -475,7 +542,7 @@ class PursuerEvaderEnv(AECEnv):
                 
                 #include the relative distance, relative velocity, and relative heading of the evader
                 #TODO: Need to refactor this code 
-                for k,v in self.agents.items():
+                for k,v in self.agents_dict.items():
                     if 'evader' in k:
                         evader_norm = self.map_real_observation_to_normalized_observation(
                             v.get_info(), self.evader_observation_constraints)
@@ -507,7 +574,7 @@ class PursuerEvaderEnv(AECEnv):
                     agent.get_info(), self.evader_observation_constraints)
                 self.observations[agent_name] = norm_observation
                 
-                for k,v in self.agents.items():
+                for k,v in self.agents_dict.items():
                     if 'pursuer' in k:
                         pursuer_norm = self.map_real_observation_to_normalized_observation(
                             v.get_info(), self.pursuer_observation_constraints)
@@ -557,13 +624,17 @@ class PursuerEvaderEnv(AECEnv):
             ROUND_END = False
             evader_survived_round = False
             
-        rewards = {}
-        truncations = {}
-        terminations = {}
+        # rewards = {}
+        # truncations = {}
+        # terminations = {}
+        rewards = {a: 0 for a in self.agents_dict}
+        truncations = {a: ROUND_END for a in self.agents_dict}
+        terminations = {a: ROUND_END for a in self.agents_dict}
+        
         out_of_bounds_penalty = np.array([-100])
         huge_payout = np.array([100])
         
-        for agent_name, agent in self.agents.items():
+        for agent_name, agent in self.agents_dict.items():
             #pursuer is negative
             if 'pursuer' in agent_name:
                 pursuer = agent
@@ -586,9 +657,9 @@ class PursuerEvaderEnv(AECEnv):
                     
                 self.rewards[agent_name] = rewards[agent_name]
                 pursuer.update_reward(rewards[agent_name])
-                truncations[agent_name]  = ROUND_END
+                #truncations[agent_name]  = ROUND_END
                 terminations[agent_name] = ROUND_END
-            
+                
             else:
                 #evader is positive
                 'evader' in agent_name
@@ -616,12 +687,21 @@ class PursuerEvaderEnv(AECEnv):
                     self.rewards[agent_name] = rewards[agent_name]
                     
                 evader.update_reward(rewards[agent_name])    
-                truncations[agent_name] = ROUND_END
+                #truncations[agent_name] = ROUND_END
                 terminations[agent_name] = ROUND_END
+
+        #check if any of the agents have terminated the episode
+        if any(terminations.values()):
+            ROUND_END = True
+            self.agents = []
+            
+        terminations = {a: ROUND_END for a in self.agents_dict}
         
+        for agent_name, obs in self.observations.items():
+            assert obs is not None, "Observations cannot be None"
+
         return self.observations, rewards, terminations, truncations, self.infos
         
-    
     def reset(self, seed=None, options=None):
         """
         Reset needs to initialize the following attributes
@@ -636,23 +716,24 @@ class PursuerEvaderEnv(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.init_agents()  
+        self.init_agents()
         self.init_agents_action_space()
         self.init_agents_observation_space()
+        self.agents = copy(self.possible_agents)
         self.rl_time_limit = self.rl_time_constant
-        self.rewards = {agent: 0 for agent in self.agents}
-        self._cumulative_rewards = {agent: 0 for agent in self.agents}
-        self.terminations = {agent: False for agent in self.agents}
-        self.truncations = {agent: False for agent in self.agents}
-        self.infos = {agent: {} for agent in self.agents}
-        # self.agent_selection = None
+        self.rewards = {agent: 0 for agent in self.agents_dict}
+        self._cumulative_rewards = {agent: 0 for agent in self.agents_dict}
+        self.terminations = {agent: False for agent in self.agents_dict}
+        self.truncations = {agent: False for agent in self.agents_dict}
+        # self.infos = {agent: {} for agent in self.agents_dict}
+        # self.state = {agent: None for agent in self.agents_dict}
+        # self.observations = {agent: None for agent in self.agents_dict}
+        # print("Agents:", self.agents)
         
-        self.state = {}
-        self.observations = {}
+        return self.observations, self.infos
         
-        for agent in self.agents:
-            self.state[agent] = None
-            self.observations[agent] = None
-            
-        return self.observations
-        
+    def render(self, mode='human'):
+        pass  # Implement rendering logic
+
+    def close(self):
+        pass  # Implement any cleanup

@@ -128,9 +128,10 @@ def eval_action_mask(env_fn, num_games=100, render_mode=None, **env_kwargs):
 
         for agent in env.agent_iter():
             obs, reward, termination, truncation, info = env.last()
-
+            print(f"Agent: {agent}, Reward: {reward}, Termination: {termination}")
             # Separate observation and action mask
             observation, action_mask = obs.values()
+            
 
             if termination or truncation:
                 # If there is a winner, keep track, otherwise don't change the scores (tie)
