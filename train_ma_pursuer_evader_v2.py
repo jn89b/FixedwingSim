@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+
 from src.fixedwing_sim.envs import ma_pursuer_evader_env_v2
 
 pursuer_control_constraints = {
@@ -64,8 +66,9 @@ env = ma_pursuer_evader_env_v2.env(
     evader_observation_constraints=evader_state_constraints,
 )
 env.reset()
-N = 500
-i = 0 
+N = 50
+i = 0
+set_random = False
 for agent in env.agent_iter():    
     observation, reward, termination, truncation, info = env.last()
     print("iteration: ", i)
@@ -75,16 +78,35 @@ for agent in env.agent_iter():
     print(f"Termination: {termination}")
     print(f"Truncation: {truncation}")
     print(f"Info: {info}")
-    print("\n")
+    print("\n")  
     
-    action = env.action_space(agent).sample()
+    if set_random:  
+        action = env.action_space(agent).sample()
+    else:
+        #action = np.array([0, 0, 0, 0])
+        action = [0, 0, 0, 0]
     
+    print("action", action)
     i += 1
     if i == N:
         break
     
     env.step(action)
 
+# 3D plot of the environment
+fig,ax = plt.subplots(subplot_kw={'projection':'3d'})
+for name, agent in env.planes.items():
+    x = agent.data_handler.x
+    y = agent.data_handler.y
+    z = agent.data_handler.z
+    ax.scatter(x[0], y[0], z[0], label=name + ' start')
+    ax.plot(x, y, z, label=name)
     
-    
-    
+ax.legend()
+
+
+#plot the rewards
+fig, ax = plt.subplots()
+for k,v in env.planes.items():
+    ax.plot(v.data_handler.rewards, label=k)
+plt.show()

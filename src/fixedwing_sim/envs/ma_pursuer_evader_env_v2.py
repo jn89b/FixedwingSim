@@ -110,9 +110,9 @@ class raw_env(AECEnv):
         self.render_mode = render_mode
         self.planes = self.init_planes()
         self.observations = {}
-        for k,v in self.planes.items():
-            self.observations[k] = v.get_info()
-
+        for agent,v in self.planes.items():
+            self.observations[agent] = self.observe(agent)
+        self.infos = self.observations
         #this is a flag to determine if the round has ended
         #based on the pursuer capturing the evader
         #or the time limit has been reached
@@ -135,7 +135,6 @@ class raw_env(AECEnv):
             if 'pursuer' in agent:
                 plane_states[agent] = self.set_plane(agent, self.pursuers_start_positions)
         return plane_states
-    
     
     def set_plane(self, agent:str, locations:list) -> Plane:
         plane = Plane()
@@ -321,6 +320,12 @@ class raw_env(AECEnv):
             elif 'min' in k:
                 low_obs.append(v)
                 
+        observation_space = spaces.Box(low=np.array(low_obs),
+                                       high=np.array(high_obs),
+                                       dtype=np.float32)
+        
+        return observation_space
+    
     def action_space(self, agent: str) -> spaces.Box:
         high_action = []
         low_action = []
@@ -343,6 +348,38 @@ class raw_env(AECEnv):
         
         return action_space
         
+    def get_relative_observations(
+        self, ego_plane:Plane, get_evader:bool=True) -> np.ndarray:
+        """
+        Get the relative observations of the other guys 
+        If you flag get_evader to true returns all the other evaders 
+        If you flag to false returns all the all the other pursuers
+        """
+        if get_evader:
+            search_string = 'evader'
+        else:
+            search_string = 'pursuer'
+
+        relative_obs = np.array([])
+        ego_state = ego_plane.get_info()
+                
+        for k, other_plane in self.planes.items():
+            
+            if search_string in k:
+                other_state = other_plane.get_info()
+                distance = np.linalg.norm(ego_state[:3] - other_state[:3])
+                dot_product = self.compute_relative_heading(ego_plane,other_plane)
+                #get the last index since that is the velocity of the vehicle
+                relative_velocities = np.abs(ego_state[-1] - other_state[-1])
+                current_rel_obs =  np.array([distance, dot_product,relative_velocities])
+                # observation = np.append(observation, relative_obs)
+            else:
+                continue 
+            
+            relative_obs = np.append(relative_obs, current_rel_obs)
+        
+        return relative_obs
+    
     def observe(self, agent):
         """
         Observe should return the observation of the specified agent. This function
@@ -352,7 +389,21 @@ class raw_env(AECEnv):
         # observation of one agent is the previous state of the other
         #plane = self.planes[agent]
         #return plane.get_info()
+        # code duplication right here but its fine for now
         observation = self.planes[agent].get_info()
+        ego_plane = self.planes[agent]
+        # we need to include the relative observation of the other agent
+        # so if we have a pursuer we want to know the relative position of it
+        # to the evader and vice versa
+        #TODO: refactor this a lot of code duplication?
+        if 'pursuer' in agent:
+            relative_obs = self.get_relative_observations(ego_plane=ego_plane,
+                                                          get_evader=True)
+        else:
+            relative_obs = self.get_relative_observations(ego_plane=ego_plane,
+                                                          get_evader=False)
+        observation = np.append(observation, relative_obs)
+        
         return observation
         # return self.observations[agent].get_info()
         #return np.array(self.observations[agent])
@@ -390,8 +441,9 @@ class raw_env(AECEnv):
         self.planes = self.init_planes()
         self.observations = {}
         for k,v in self.planes.items():
-            self.observations[k] = v.get_info()
-        
+            self.observations[k] = self.observe(k)
+        #TODO: refactor this a lot of duplication
+        self.info = self.planes 
         #self.observations = {agent: self.observe(agent) for agent in self.agents}
         self.rl_time_limit = self.rl_time_constant
 
@@ -402,6 +454,8 @@ class raw_env(AECEnv):
         """
         Get the relative distance between the pursuer and the evader
         """
+        # if 'pursuer' in agent:
+        #     for agent_names, planes in self.planes
         
     def compute_relative_heading(self, ego:Plane, other:Plane) -> float:
         """
@@ -433,6 +487,7 @@ class raw_env(AECEnv):
             sim_done = True
             return self.out_of_bounds_penalty, sim_done
 
+        #TODO: refactor this to consider more pursuers and evaders
         pursuer_state = pursuer.get_info()
         evader_state = evader.get_info()
         
@@ -557,6 +612,8 @@ class raw_env(AECEnv):
         
         # update the observations dictionary
         self.observations[agent] = self.observe(agent)
+        #TODO: need to remove the planes and make it just infos
+        self.infos[agent] = self.planes[agent]
         
         # decrease the time limit
         self.rl_time_limit -= 1        
@@ -564,28 +621,32 @@ class raw_env(AECEnv):
         # check condition to see if the round has ended
         if self.rl_time_limit == 0:
             self.ROUND_END = True
-        
+            
         # update the rewards dictionary
         if 'pursuer' in agent:
             reward, is_done = self.get_pursuer_reward(current_plane, 
                                                           self.planes['evader'],
-                                                          state_constraints)
+                                                          state_constraints)    
         else:
             reward, is_done = self.get_evader_reward(current_plane, 
                                                          self.planes['pursuer'],
                                                          state_constraints)
         
         self.rewards[agent] = reward
-        if is_done:
-            self.ROUND_END = True
-            
+        self.planes[agent].update_reward(reward)
+    
         # select the next agent
         self.agent_selection = self._agent_selector.next()
+        print("agent selection", self.agent_selection)
+        if is_done:
+            self.ROUND_END = True
+            # since this is a 0 sum game we want to set the reward for the other
+            # agent to be the opposite of the reward of the other agent
+            self.rewards[self.agent_selection] = -reward
+            self.planes[self.agent_selection].update_reward(-reward)            
+        
         # add rewards to the cumulative rewards
         self._accumulate_rewards()
         
         if self.render_mode == 'human':
             self.render()
-            
-            
- 
