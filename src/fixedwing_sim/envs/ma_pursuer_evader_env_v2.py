@@ -1,12 +1,13 @@
 import os 
 import numpy as np
-
+import functools
 from pettingzoo import AECEnv, ParallelEnv
 from gymnasium import spaces
 from src.models.Plane import Plane
 from copy import copy
 from pettingzoo.utils import wrappers
 from pettingzoo.utils import agent_selector
+from pettingzoo.utils.conversions import parallel_wrapper_fn
 
 def env(render_mode=None, 
         n_pursuers:int=1,
@@ -27,6 +28,7 @@ def env(render_mode=None,
     We recomend you use at least the OrderEnforcingWrapper on your own environment
     to provide sane error messages. You can find full documentation for these methods
     elsewhere in the developer documentation.
+    TODO:refactor this to use kwargs for the environment parameters
     '''
     env = raw_env(
         render_mode=render_mode,
@@ -44,9 +46,12 @@ def env(render_mode=None,
         rl_time_limit=rl_time_limit
     )
     # env = wrappers.CaptureStdoutWrapper(env)
+    env = wrappers.ClipOutOfBoundsWrapper(env)
     env = wrappers.AssertOutOfBoundsWrapper(env)
     env = wrappers.OrderEnforcingWrapper(env)
     return env
+
+parallel_env = parallel_wrapper_fn(env)
 
 
 class raw_env(AECEnv):
@@ -103,6 +108,7 @@ class raw_env(AECEnv):
         self.dt = dt
         #used to determine the number of steps in a second for input frequency of the agents
         self.every_one_second = int(1/dt)
+        rl_time_limit = 50
         self.rl_time_limit = rl_time_limit 
         self.rl_time_constant = rl_time_limit
 
@@ -110,9 +116,10 @@ class raw_env(AECEnv):
         self.render_mode = render_mode
         self.planes = self.init_planes()
         self.observations = {}
+        self.infos = {}
         for agent,v in self.planes.items():
             self.observations[agent] = self.observe(agent)
-        self.infos = self.observations
+            self.infos[agent] = {}
         #this is a flag to determine if the round has ended
         #based on the pursuer capturing the evader
         #or the time limit has been reached
@@ -283,6 +290,7 @@ class raw_env(AECEnv):
     def render(self):
         pass
 
+    @functools.lru_cache(maxsize=None)
     def observation_space(self, agent: str) -> spaces.Box:
         """
         We'll use rays to normalize the observation space for each agent
@@ -302,30 +310,31 @@ class raw_env(AECEnv):
             elif 'min' in k:
                 low_obs.append(v)    
         
-        n_relative_values = 3
+        # Add the constraints for relative observations
         relative_max_params = {
             'max_relative_distance': 1000,
             'max_dot_product': 1,
             'max_relative_speed': 50,
+        }
+        relative_min_params = {
             'min_relative_distance': 0,
             'min_dot_product': -1,
-            'min_relative_speed': 0
+            'min_relative_speed': 0,
         }
 
-        #make a list of the max and min values for the relative values
-        # #TODO: need to refactor this to be more general and take in number of pursuers and evaders
-        for k,v in relative_max_params.items():
-            if 'max' in k:
-                high_obs.append(v)
-            elif 'min' in k:
-                low_obs.append(v)
-                
+        for k, v in relative_max_params.items():
+            high_obs.append(v)
+
+        for k, v in relative_min_params.items():
+            low_obs.append(v)
+
         observation_space = spaces.Box(low=np.array(low_obs),
-                                       high=np.array(high_obs),
-                                       dtype=np.float32)
-        
+                                    high=np.array(high_obs),
+                                    dtype=np.float32)
+
         return observation_space
     
+    @functools.lru_cache(maxsize=None)    
     def action_space(self, agent: str) -> spaces.Box:
         high_action = []
         low_action = []
@@ -338,9 +347,9 @@ class raw_env(AECEnv):
             
         for k,v in control_constraints.items():
             if 'max' in k:
-                high_action.append(1)
+                high_action.append(v)
             elif 'min' in k:
-                low_action.append(-1)
+                low_action.append(v)
                 
         action_space = spaces.Box(low=np.array(low_action),
                                   high=np.array(high_action),
@@ -377,7 +386,7 @@ class raw_env(AECEnv):
                 continue 
             
             relative_obs = np.append(relative_obs, current_rel_obs)
-        
+    
         return relative_obs
     
     def observe(self, agent):
@@ -403,7 +412,7 @@ class raw_env(AECEnv):
             relative_obs = self.get_relative_observations(ego_plane=ego_plane,
                                                           get_evader=False)
         observation = np.append(observation, relative_obs)
-        
+         
         return observation
         # return self.observations[agent].get_info()
         #return np.array(self.observations[agent])
@@ -416,7 +425,7 @@ class raw_env(AECEnv):
         """
         pass
     
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None) -> tuple:
         """
         Reset needs to initialize the following attributes
         - agents
@@ -435,20 +444,22 @@ class raw_env(AECEnv):
         self._cumulative_rewards = {agent: 0 for agent in self.agents}
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
-        self.infos = {agent: {} for agent in self.agents}
         # self.state = self.init_planes()
-        self.state = {agent: None for agent in self.agents}
+        # self.state = {agent: None for agent in self.agents}
         self.planes = self.init_planes()
         self.observations = {}
         for k,v in self.planes.items():
             self.observations[k] = self.observe(k)
+            self.infos[k] = {}
         #TODO: refactor this a lot of duplication
-        self.info = self.planes 
+
         #self.observations = {agent: self.observe(agent) for agent in self.agents}
         self.rl_time_limit = self.rl_time_constant
-
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
+        self.ROUND_END = False
+
+        # return self.observations, self.infos
         
     def get_relative_distance_obs(self, agent:str) -> np.ndarray:
         """
@@ -567,16 +578,27 @@ class raw_env(AECEnv):
         """
         
         #TODO: need to refactor this to be more general and take in number of pursuers and evaders
+        # if action is None:
+        #     return 
         
         # if any of the terminations are True, set true for all agents
         # and end the round
-        if (self.ROUND_END):
-            for agent in self.agents:
-                self.terminations[agent] = True
-                self.truncations[agent] = True
+        agent = self.agent_selection
+        
+        if (self.truncations[agent] or self.terminations[agent]):
             return 
         
-        agent = self.agent_selection
+        # if (self.ROUND_END):
+        #     for agent in self.agents:
+        #         self.terminations[agent] = True
+        #         self.truncations[agent] = True
+        #     return self.observations, self.rewards, self.terminations, self.truncations, self.infos
+        
+        # if action is None:
+        #     # self._was_dead_step(agent)
+        #     return 
+        
+        print("action is: ", action)
             
         if 'pursuer' in agent:
             control_constraints = self.pursuer_control_constraints
@@ -591,10 +613,10 @@ class raw_env(AECEnv):
         self._cumulative_rewards[agent] = 0
         
         # get the current state of the agent
-        self.state[agent] = action
-        
-        denorm_action = self.map_normalized_action_to_real_action(action, 
-            control_constraints)
+        # self.state[agent] = action
+        denorm_action = action
+        # denorm_action = self.map_normalized_action_to_real_action(action, 
+        #     control_constraints)
                 
         # move the agent based on the action 
         current_time_step = self.rl_time_limit 
@@ -605,15 +627,21 @@ class raw_env(AECEnv):
         for i in range(self.every_one_second):
             next_step = current_plane.rk45(next_state, denorm_action, self.dt)
             current_plane.set_info(next_step)
+            #wrap yaw from -pi to pi
+            if next_step[5] > np.pi:
+                next_step[5] -= 2*np.pi
+            elif next_step[5] < -np.pi:
+                next_step[5] += 2*np.pi
+                
             actual_sim_time = current_time_step + i * self.dt
             current_plane.set_time(actual_sim_time)
-            #TODO:
-            # include a conditional check here to break out of loop 
+            #TODO: include a conditional check here to break out of loop 
         
         # update the observations dictionary
         self.observations[agent] = self.observe(agent)
         #TODO: need to remove the planes and make it just infos
-        self.infos[agent] = self.planes[agent]
+        self.infos[agent] = {}
+        reward = 0
         
         # decrease the time limit
         self.rl_time_limit -= 1        
@@ -631,22 +659,30 @@ class raw_env(AECEnv):
             reward, is_done = self.get_evader_reward(current_plane, 
                                                          self.planes['pursuer'],
                                                          state_constraints)
-        
-        self.rewards[agent] = reward
-        self.planes[agent].update_reward(reward)
-    
+        reward = 1
+        self.rewards[agent] += reward
+        self.planes[agent].update_reward(reward)    
         # select the next agent
-        self.agent_selection = self._agent_selector.next()
-        print("agent selection", self.agent_selection)
         if is_done:
+            print("The round has ended", self.observations)
             self.ROUND_END = True
+            next_agent = self._agent_selector.next()
             # since this is a 0 sum game we want to set the reward for the other
-            # agent to be the opposite of the reward of the other agent
-            self.rewards[self.agent_selection] = -reward
-            self.planes[self.agent_selection].update_reward(-reward)            
-        
+            # agent to be the opposite of the reward of the other agent 
+            # if the one agent wins the other agent has to lose no draw
+            self.rewards[next_agent] += -reward
+            self.planes[next_agent].update_reward(-reward)
+
+        self.agent_selection = self._agent_selector.next()
+                        
+    
         # add rewards to the cumulative rewards
         self._accumulate_rewards()
         
+        if self.ROUND_END:
+            self.terminations = {agent: True for agent in self.agents}
+        
         if self.render_mode == 'human':
             self.render()
+
+        # return self.observations, self.rewards, self.terminations, self.truncations, self.infos
