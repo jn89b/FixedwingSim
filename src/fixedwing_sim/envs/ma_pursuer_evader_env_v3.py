@@ -145,8 +145,8 @@ def env(render_mode=None,
     pursuer_control_constraints = {
         'u_phi_min':  -np.deg2rad(45),
         'u_phi_max':   np.deg2rad(45),
-        'u_theta_min':-np.deg2rad(10),
-        'u_theta_max': np.deg2rad(10),
+        'u_theta_min':-np.deg2rad(5),
+        'u_theta_max': np.deg2rad(5),
         'u_psi_min':  -np.deg2rad(45),
         'u_psi_max':   np.deg2rad(45),
         'v_cmd_min':   15,
@@ -173,12 +173,12 @@ def env(render_mode=None,
     evader_control_constraints = {
         'u_phi_min':  -np.deg2rad(45),
         'u_phi_max':   np.deg2rad(45),
-        'u_theta_min':-np.deg2rad(10),
-        'u_theta_max': np.deg2rad(10),
+        'u_theta_min':-np.deg2rad(5),
+        'u_theta_max': np.deg2rad(5),
         'u_psi_min':  -np.deg2rad(45),
         'u_psi_max':   np.deg2rad(45),
         'v_cmd_min':   15,
-        'v_cmd_max':   30
+        'v_cmd_max':   25
     }
 
     evader_observation_constraints = {
@@ -195,7 +195,7 @@ def env(render_mode=None,
         'psi_min':  -np.pi,
         'psi_max':   np.pi,
         'airspeed_min': 15,
-        'airspeed_max': 30
+        'airspeed_max': 25
     }
 
     # env = raw_env(**kwargs)
@@ -295,44 +295,13 @@ class raw_env(AECEnv):
             'min_dot_product': -1,
             'min_relative_speed': 0,
         }
-        # # number of actions must be odd and greater than 3
-        # assert num_actions > 2, "The number of actions must be equal or greater than 3."
-        # assert num_actions % 2 != 0, "The number of actions must be an odd number."
-        # self._moves = ["ROCK", "PAPER", "SCISSORS"]
-        # if num_actions > 3:
-        #     # expand to lizard, spock for first extra action pair
-        #     self._moves.extend(("SPOCK", "LIZARD"))
-        #     for action in range(num_actions - 5):
-        #         self._moves.append("ACTION_" f"{action + 6}")
-        # # none is last possible action, to satisfy discrete action space
-        
-        # self._moves.append("None")
-        # self._none = num_actions
-
-        # self.agents = ["player_" + str(r) for r in range(2)]
-        # self.possible_agents = self.agents[:]
-        # self.agent_name_mapping = dict(zip(self.agents, list(range(self.num_agents))))
-        # self.action_spaces = {agent: Discrete(num_actions) for agent in self.agents}
-        # self.observation_spaces = {
-        #     agent: Discrete(1 + num_actions) for agent in self.agents
-        # }
 
         self.agents = ['pursuer' , 'evader']
         self.possible_agents = self.agents[:]
-        # self.num_agents = len(self.agents)
-        # self.agent_name_mapping = dict(zip(self.agents, list(range(self.num_agents))))
         self.planes = self.init_planes()
         self.action_spaces = self.init_action_spaces()
         self.observation_spaces = self.init_observation_spaces()
-        
-    
-        
-        # self.render_mode = render_mode
-        # self.screen_height = screen_height
-        # self.screen = None
-        
-        # if self.render_mode == "human":
-        #     self.clock = pygame.time.Clock()
+
         self.render_mode = render_mode
 
     ########### METHODS ADDED BY ME ################
@@ -404,11 +373,12 @@ class raw_env(AECEnv):
         """
         """
         ego_position = ego.get_info()[:3]
-        if ego_position[0] < state_constraints['x_min'] or ego_position[0] > state_constraints['x_max']:
+        buffer = 1
+        if ego_position[0] < state_constraints['x_min']+buffer or ego_position[0] > state_constraints['x_max']-buffer:
             return True
-        elif ego_position[1] < state_constraints['y_min'] or ego_position[1] > state_constraints['y_max']:
+        elif ego_position[1] < state_constraints['y_min']+buffer or ego_position[1] > state_constraints['y_max'] - buffer:
             return True
-        elif ego_position[2] < state_constraints['z_min'] or ego_position[2] > state_constraints['z_max']:
+        elif ego_position[2] < state_constraints['z_min']+buffer or ego_position[2] > state_constraints['z_max'] - buffer:
             return True
         
         return False
@@ -582,15 +552,169 @@ class raw_env(AECEnv):
         self.observations = {agent: self.get_observation(agent) for agent in self.agents}
         self.rl_time_limit = self.rl_time_constant
         self.ROUND_END = False
+        
+    def map_real_to_norm(self, norm_max:float, norm_min:float, real_val:float) -> float:
+        """I can probably abstract this out to a utility function"""
+        #TODO: put this in a utility function
+        return 2 * (real_val - norm_min) / (norm_max - norm_min) - 1
+    
+    def norm_map_to_real(self, norm_max:float, norm_min:float, norm_val:float) -> float:
+        """
+        I can probably abstract this out to a utility function
+        """
+        #TODO: put this in a utility function
+        return norm_min + (norm_max - norm_min) * (norm_val + 1) / 2
+        
+    def map_real_observation_to_normalized_observation(self, 
+            observation:np.ndarray, state_constraints:dict) -> np.ndarray:
+        """
+        observations are normalized to [-1, 1] and must be mapped to the
+        constraints of the aircraft
+        """
+        x = observation[0]
+        y = observation[1]
+        z = observation[2]
+        roll = observation[3]
+        pitch = observation[4]
+        yaw = observation[5]
+        v = observation[6]
+        
+        x_norm = self.map_real_to_norm(state_constraints['x_max'],
+                                       state_constraints['x_min'],
+                                       x)
+        
+        y_norm = self.map_real_to_norm(state_constraints['y_max'],
+                                       state_constraints['y_min'],
+                                       y)
+        
+        z_norm = self.map_real_to_norm(state_constraints['z_max'],
+                                       state_constraints['z_min'],
+                                       z)
+        
+        roll_norm = self.map_real_to_norm(state_constraints['phi_max'],
+                                          state_constraints['phi_min'],
+                                          roll)
+        
+        pitch_norm = self.map_real_to_norm(state_constraints['theta_max'],
+                                           state_constraints['theta_min'],
+                                           pitch)
+        
+        yaw_norm = self.map_real_to_norm(state_constraints['psi_max'],
+                                         state_constraints['psi_min'],
+                                         yaw)
+        
+        v_norm = self.map_real_to_norm(state_constraints['airspeed_max'],
+                                       state_constraints['airspeed_min'],
+                                       v)
+        
+        norm_obs = np.array([x_norm, y_norm, z_norm, roll_norm, pitch_norm, yaw_norm, v_norm])
+        #make sure to return as float32
+        return norm_obs.astype(np.float32)
+    
+        
+    def get_pursuer_reward(self, pursuer:Plane, evader:Plane,
+                           state_constraints:dict) -> tuple:
+        """
+        For the pursuer we want to MINIMIZE the distance 
+        between the pursuer and the evader, as well as MAXIMIZE
+        the dot product
+        
+        Returns a tuple of the reward and whether the simulation is done
+        
+        """ 
+        sim_done = False
+        if self.is_out_of_bounds(pursuer, state_constraints):
+            print("Pursuer is out of bounds")
+            sim_done = True
+            return self.out_of_bounds_penalty, sim_done
+
+        #TODO: refactor this to consider more pursuers and evaders
+        pursuer_state = pursuer.get_info()
+        evader_state = evader.get_info()
+        
+        #check if we have captured the evader
+        distance = np.linalg.norm(pursuer_state[:3] - evader_state[:3])
+        if distance <= self.pursuer_capture_distance:
+            print("Pursuer has captured the evader")
+            sim_done = True
+            return self.terminal_reward, sim_done
+        
+        if self.rl_time_limit == 0:
+            sim_done = True
+            return -self.terminal_reward, sim_done
+        
+        
+        #get the normalized observation
+        norm_obs = self.map_real_observation_to_normalized_observation(
+            pursuer_state, state_constraints)
+        
+        other_norm_obs = self.map_real_observation_to_normalized_observation(
+            evader_state, state_constraints)
+        
+        norm_distance = np.linalg.norm(norm_obs[:3] - other_norm_obs[:3])
+        dot_product = self.compute_relative_heading(pursuer, evader)
+        
+        reward = -norm_distance + dot_product
+        
+        return reward, sim_done
+        
+    def compute_relative_heading(self, ego:Plane, other:Plane) -> float:
+        """
+        Computes the relative heading between the ego and another plane
+        this will be used to compute the dot product
+        """
+        # relative_heading = np.arctan2(ego.get_info()[1] - other.get_info()[1],
+        #                               ego.get_info()[0] - other.get_info()[0])
+        ego_heading = ego.get_info()[5]
+        other_heading = other.get_info()[5]
+        ego_unit_vector = np.array([np.cos(ego_heading), np.sin(ego_heading)])
+        other_unit_vector = np.array([np.cos(other_heading), np.sin(other_heading)])
+        
+        relative_heading = np.dot(ego_unit_vector, other_unit_vector)
+        return relative_heading
+        
+        
+    def get_evader_reward(self, evader:Plane, pursuer:Plane,
+                          state_constraints:dict) -> tuple:
+        """
+        For the pursuer we want to MAXIMIZE the distance between
+        the pursuer and the evader, as well as MINIMIZE the dot product
+        """
+        sim_done = False
+        if self.is_out_of_bounds(evader, state_constraints):
+            print("Evader is out of bounds")
+            sim_done = True
+            return self.out_of_bounds_penalty, sim_done
+        
+        pursuer_state = pursuer.get_info()
+        evader_state = evader.get_info()
+        
+        #check if evader has been captured
+        distance = np.linalg.norm(pursuer_state[:3] - evader_state[:3])
+        if distance < self.pursuer_capture_distance:
+            sim_done = True
+            #minus because this is really a penalty
+            return -self.terminal_reward, sim_done
+        
+        if self.rl_time_limit == 0:
+            sim_done = True
+            return self.terminal_reward, sim_done
+        
+        norm_obs = self.map_real_observation_to_normalized_observation(
+            evader_state, state_constraints)
+        
+        other_norm_obs = self.map_real_observation_to_normalized_observation(
+            pursuer_state, state_constraints)
+        
+        norm_distance = np.linalg.norm(norm_obs[:3] - other_norm_obs[:3])
+        dot_product = self.compute_relative_heading(evader, pursuer)
+        
+        reward = norm_distance - dot_product
+        
+        return reward, sim_done
 
     def step(self, action):
-        # if any(
-        #     self.terminations[self.agent_selection]
-        #     or self.truncations[self.agent_selection]
-        # ):
-        #     # self._was_dead_step(action)
-        #     return
-        
+
         #check if termination is true
         for k,v in self.terminations.items():
             if v:
@@ -631,23 +755,24 @@ class raw_env(AECEnv):
         #update the observation
         current_obs = self.get_observation(current_agent)
         self.observations[current_agent] = current_obs
-        
+
         reward = 0 
         self.rl_time_limit -= 1
         
-        #TODO: update the rewards dictionary 
-        if self.is_out_of_bounds(current_plane, state_constraints):
-            self.ROUND_END = True
-            reward = self.out_of_bounds_penalty 
-            for agent in self.agents:
-                if agent == current_agent:
-                    self.rewards[agent] = reward
-                else:
-                    self.rewards[agent] = -reward 
+        # this is the dot product and distance between the two planes
+        if 'pursuer' in current_agent:
+            reward, is_done = self.get_pursuer_reward(current_plane, 
+                                                          self.planes['evader'],
+                                                          state_constraints)    
+        else:
+            reward, is_done = self.get_evader_reward(current_plane, 
+                                                         self.planes['pursuer'],
+                                                         state_constraints)
 
-        # compute the reward value 
+        # Time limit has been reached
         if self.rl_time_limit == 0:
             self.ROUND_END = True
+            print("Time limit reached evader wins")
             # self.terminations = {agent: True for agent in self.agents}
             reward = self.terminal_reward
             for agent in self.agents:
@@ -655,10 +780,29 @@ class raw_env(AECEnv):
                     self.rewards[agent] = -reward
                 else:
                     self.rewards[agent] = reward
-                
+        # out of bounds penalty
+        elif self.is_out_of_bounds(current_plane, state_constraints):
+            self.ROUND_END = True
+            reward = self.out_of_bounds_penalty 
+            for agent in self.agents:
+                if agent == current_agent:
+                    self.rewards[agent] = reward
+                else:
+                    self.rewards[agent] = 0 
+        # the other agent has been captured
+        elif is_done:
+            self.ROUND_END = True
+            self.rewards[current_agent] = reward
+            for agent in self.agents:
+                if agent == current_agent:
+                    self.rewards[agent] = reward
+                else:
+                    self.rewards[agent] = -reward
+        
         self._cumulative_rewards[current_agent] = reward
         
         if self.ROUND_END:
+            print("Round Ended", self.rewards)
             self.terminations = {agent: True for agent in self.agents}
             self.truncations = {agent: True for agent in self.agents}
             # self.infos = {agent: {} for agent in self.agents}
@@ -670,53 +814,12 @@ class raw_env(AECEnv):
             
         # add rewards to the cumulative rewards
         self._accumulate_rewards()
-
-        # # collect reward if it is the last agent to act
-        # if self._agent_selector.is_last():
-        #     # same action => 0 reward each agent
-        #     if self.state[self.agents[0]] == self.state[self.agents[1]]:
-        #         rewards = (0, 0)
-        #     else:
-        #         # same action parity => lower action number wins
-        #         if (self.state[self.agents[0]] + self.state[self.agents[1]]) % 2 == 0:
-        #             if self.state[self.agents[0]] > self.state[self.agents[1]]:
-        #                 rewards = (-1, 1)
-        #             else:
-        #                 rewards = (1, -1)
-        #         # different action parity => higher action number wins
-        #         else:
-        #             if self.state[self.agents[0]] > self.state[self.agents[1]]:
-        #                 rewards = (1, -1)
-        #             else:
-        #                 rewards = (-1, 1)
-        #     self.rewards[self.agents[0]], self.rewards[self.agents[1]] = rewards
-
-        #     self.num_moves += 1
-
-        #     self.truncations = {
-        #         agent: self.num_moves >= self.max_cycles for agent in self.agents
-        #     }
-        #     for i in self.agents:
-        #         self.observations[i] = self.state[
-        #             self.agents[1 - self.agent_name_mapping[i]]
-        #         ]
-
-        #     if self.render_mode == "human":
-        #         self.render()
-
-        #     # record history by pushing back
-        #     self.history[2:] = self.history[:-2]
-        #     self.history[0] = self.state[self.agents[0]]
-        #     self.history[1] = self.state[self.agents[1]]
-
-        # else:
-        #     self.state[self.agents[1 - self.agent_name_mapping[agent]]] = self._none
-
-        #     self._clear_rewards()
-
-        #     if self.render_mode == "human":
-        #         self.render()
-
-        # self._cumulative_rewards[self.agent_selection] = 0
-        # self.agent_selection = self._agent_selector.next()
-        # self._accumulate_rewards()
+        
+        self.infos[current_agent] = {
+            'state': next_state,
+            'observation': current_obs,
+            'action': action,
+            'time': actual_sim_time,
+            'reward': reward
+        }
+        

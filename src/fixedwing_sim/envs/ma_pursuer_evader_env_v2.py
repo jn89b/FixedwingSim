@@ -659,7 +659,7 @@ class raw_env(AECEnv):
             reward, is_done = self.get_evader_reward(current_plane, 
                                                          self.planes['pursuer'],
                                                          state_constraints)
-        reward = 1
+        # reward = 1
         self.rewards[agent] += reward
         self.planes[agent].update_reward(reward)    
         # select the next agent
