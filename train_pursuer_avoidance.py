@@ -1,8 +1,10 @@
+import matplotlib.pyplot as plt
 import casadi as ca
 import numpy as np
 from src.models.Plane import Plane
-from opt_control.PlaneOptControl import PlaneOptControl
-from jsbsim_backend.aircraft import Aircraft, x8
+from src.opt_control.PlaneOptControl import PlaneOptControl
+from src.jsbsim_backend.aircraft import Aircraft, x8
+
 
 import gymnasium as gym
 from src.sim_interface import OpenGymInterface
@@ -20,6 +22,7 @@ from stable_baselines3.common.env_checker import check_env
 Test the MPC imports
 """
 
+
 class DataHandler():
     def __init__(self) -> None:
         self.x = []
@@ -29,8 +32,8 @@ class DataHandler():
         self.pitch = []
         self.yaw = []
         self.u = []
-        
-    def update_data(self,info_array:np.ndarray):
+
+    def update_data(self, info_array: np.ndarray):
         self.x.append(info_array[0])
         self.y.append(info_array[1])
         self.z.append(info_array[2])
@@ -39,10 +42,11 @@ class DataHandler():
         self.yaw.append(info_array[5])
         self.u.append(info_array[6])
 
-def init_mpc_controller(mpc_control_constraints:dict,
-                        state_constraints:dict,
-                        mpc_params:dict, 
-                        plane_model:dict) -> PlaneOptControl:
+
+def init_mpc_controller(mpc_control_constraints: dict,
+                        state_constraints: dict,
+                        mpc_params: dict,
+                        plane_model: dict) -> PlaneOptControl:
 
     plane_mpc = PlaneOptControl(
         control_constraints=mpc_control_constraints,
@@ -54,7 +58,7 @@ def init_mpc_controller(mpc_control_constraints:dict,
 
 
 LOAD_MODEL = False
-TOTAL_TIMESTEPS = 1250000#100000/2 #
+TOTAL_TIMESTEPS = 2250000  # 100000/2 #
 CONTINUE_TRAINING = False
 COMPARE_MODELS = False
 
@@ -84,11 +88,11 @@ mpc_params = {
 }
 
 rl_control_constraints = {
-    'x_min': -30,
-    'x_max': 30,
-    'y_min': -30,
-    'y_max': 30,
-    'z_min': 30,
+    'x_min': -1500,
+    'x_max': 1500,
+    'y_min': -1500,
+    'y_max': 1500,
+    'z_min': -100,
     'z_max': 100,
     'heading_cmd_min': 0,
     'heading_cmd_max': 2*np.pi,
@@ -97,28 +101,28 @@ rl_control_constraints = {
 }
 
 control_constraints = {
-    'u_phi_min':  -np.deg2rad(45),
+    'u_phi_min': -np.deg2rad(45),
     'u_phi_max':   np.deg2rad(45),
-    'u_theta_min':-np.deg2rad(10),
+    'u_theta_min': -np.deg2rad(10),
     'u_theta_max': np.deg2rad(10),
-    'u_psi_min':  -np.deg2rad(45),
+    'u_psi_min': -np.deg2rad(45),
     'u_psi_max':   np.deg2rad(45),
     'v_cmd_min':   15,
     'v_cmd_max':   30
 }
 
 state_constraints = {
-    'x_min': -1500, #-np.inf,
-    'x_max': 1500, #np.inf,
-    'y_min': -1500, #-np.inf,
-    'y_max': 1500, #np.inf,
-    'z_min': 30,
-    'z_max': 100,
-    'phi_min':  -np.deg2rad(45),
+    'x_min': -1500,  # -np.inf,
+    'x_max': 1500,  # np.inf,
+    'y_min': -1500,  # -np.inf,
+    'y_max': 1500,  # np.inf,
+    'z_min': -250,
+    'z_max': 250,
+    'phi_min': -np.deg2rad(45),
     'phi_max':   np.deg2rad(45),
-    'theta_min':-np.deg2rad(20),
+    'theta_min': -np.deg2rad(20),
     'theta_max': np.deg2rad(20),
-    'psi_min':  -np.pi,
+    'psi_min': -np.pi,
     'psi_max':   np.pi,
     'airspeed_min': 15,
     'airspeed_max': 30
@@ -135,15 +139,15 @@ mpc_control = init_mpc_controller(
 aircraft = x8
 
 gym_adapter = OpenGymInterface(init_conditions=init_state_dict,
-                                 aircraft=aircraft,
-                                 use_mpc=True,
-                                 flight_dynamics_sim_hz=200,
-                                 mpc_controller=mpc_control)
+                               aircraft=aircraft,
+                               use_mpc=True,
+                               flight_dynamics_sim_hz=200,
+                               mpc_controller=mpc_control)
 
-#### This is the environment that will be used for training
-env = gym.make('PursuerEnv', 
-               use_random_start = True,
-               num_pursuers = 2,
+# This is the environment that will be used for training
+env = gym.make('PursuerEnv',
+               use_random_start=True,
+               num_pursuers=2,
                backend_interface=gym_adapter,
                rl_control_constraints=rl_control_constraints,
                mpc_control_constraints=control_constraints,
@@ -168,9 +172,9 @@ distance_history = []
 # model_name ="pursuer_avoidance"
 # model_name = "dumb_single_avoidance"
 model_name = "two_pursuer_avoidance"
-checkpoint_callback = CheckpointCallback(save_freq=10000, 
-                                        save_path='./models/'+model_name+'_4/',
-                                        name_prefix=model_name)
+checkpoint_callback = CheckpointCallback(save_freq=10000,
+                                         save_path='./models/'+model_name+'_4/',
+                                         name_prefix=model_name)
 check_env(env)
 
 n_steps = 550 * 4
@@ -178,14 +182,14 @@ n_epochs = 10
 batch_size = 100
 
 if LOAD_MODEL and not CONTINUE_TRAINING:
-    model = PPO.load(model_name)    
+    model = PPO.load(model_name)
     model.set_env(env)
-    
+
     # if COMPARE_MODELS:
     #     dumb_model = PPO.load(dumb_model_name)
     #     dumb_model.set_env(env)
     #     print("dumb model loaded")
-    
+
     print("model loaded")
 elif LOAD_MODEL and CONTINUE_TRAINING:
     model = PPO.load(model_name)
@@ -196,20 +200,20 @@ elif LOAD_MODEL and CONTINUE_TRAINING:
     model.save(model_name)
     print("model saved")
 else:
-    #check env 
+    # check env
     # check_env(env)
-    model = PPO("MultiInputPolicy", 
+    model = PPO("MultiInputPolicy",
                 env,
                 n_epochs=n_epochs,
                 ent_coef=0.001,
-                seed=1, 
-                verbose=1, tensorboard_log='tensorboard_logs/', 
+                seed=1,
+                verbose=1, tensorboard_log='tensorboard_logs/',
                 device='cuda')
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4, 
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, log_interval=4,
                 callback=checkpoint_callback)
     model.save(model_name)
     print("model saved")
-    
+
 # #use DDPG
 # model = DDPG("MultiInputPolicy",
 #              env,
@@ -236,34 +240,32 @@ for i in range(4):
     obs, info = env.reset(seed=3)
 
 # for i in range(N):
-counter = 0 
-while done == False:   
+counter = 0
+while done == False:
     action, _states = model.predict(obs)
     obs, reward, done, _, info = env.step(action)
     reward_history.append(reward)
-    #env.render()
+    # env.render()
     ego_data.update_data(obs['actual_ego'])
     counter += 1
-    for p,k in zip(pursuer_datas,info.keys()):
+    for p, k in zip(pursuer_datas, info.keys()):
         p.update_data(info[k])
-    
+
     if done == True:
         print("done")
         obs, info = env.reset()
         break
 
-    
-        
-#%% 
-#get time
+
+# %%
+# get time
 print("counter is: ", counter)
 print("sim time is: ", env.backend_interface.sim.get_time())
 print("sim frequency is: ", env.backend_interface.flight_dynamics_sim_hz)
 for i, pursuer in enumerate(env.pursuers):
     print(f"pursuer {i} sim time is: ", pursuer.sim.get_time())
     print("pursuer {i} sim frequency is: ", pursuer.flight_dynamics_sim_hz)
-#plot pursuers and evader
-import matplotlib.pyplot as plt
+# plot pursuers and evader
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
@@ -271,9 +273,10 @@ ax = fig.add_subplot(111, projection='3d')
 ax.plot(ego_data.x, ego_data.y, ego_data.z, label='ego')
 ax.scatter(ego_data.x[0], ego_data.y[0], ego_data.z[0], label='ego start')
 for i, pursuer in enumerate(pursuer_datas):
-    ax.scatter(pursuer.x[0], pursuer.y[0], pursuer.z[0], label=f'pursuer start {i}')
+    ax.scatter(pursuer.x[0], pursuer.y[0],
+               pursuer.z[0], label=f'pursuer start {i}')
     ax.plot(pursuer.x, pursuer.y, pursuer.z, label=f'pursuer {i}')
-    
+
 ax.set_xlabel('X Label')
 ax.set_ylabel('Y Label')
 ax.set_zlabel('Z Label')
@@ -283,13 +286,13 @@ fig = plt.figure()
 plt.plot(reward_history)
 
 
-#plot roll, pitch, yaw in degrees 
-fig, ax = plt.subplots(4,1)
+# plot roll, pitch, yaw in degrees
+fig, ax = plt.subplots(4, 1)
 ax[0].plot(np.rad2deg(ego_data.roll), label='phi')
 ax[1].plot(np.rad2deg(ego_data.pitch), label='theta')
 ax[2].plot(np.rad2deg(ego_data.yaw), label='psi')
 ax[3].plot(ego_data.u, label='airspeed')
 for a in ax:
     a.legend()
-    
+
 plt.show()

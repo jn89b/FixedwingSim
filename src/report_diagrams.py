@@ -1,16 +1,16 @@
+import numpy as np
+import math
+import src.guidance_control.navigation as navigation
+import src.jsbsim_backend.properties as prp
+import matplotlib.pyplot as plt
+from matplotlib import rc
 import matplotlib
 matplotlib.rcParams['text.usetex'] = True
-from matplotlib import rc
 # rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-## for Palatino and other serif fonts use:
+# for Palatino and other serif fonts use:
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
-import matplotlib.pyplot as plt
 # import jsbsim_properties as prp
-import jsbsim_backend.properties as prp
-import guidance_control.navigation as navigation
-import math
-import numpy as np
 
 
 class ReportGraphs:
@@ -53,7 +53,8 @@ class ReportGraphs:
         self.alt.append(self.sim.get_local_position()[2])
 
     def get_attitude_data(self):
-        self.pitch.append(self.sim.get_local_orientation()[0] * (180 / math.pi))
+        self.pitch.append(self.sim.get_local_orientation()
+                          [0] * (180 / math.pi))
         self.roll.append(self.sim.get_local_orientation()[1] * (180 / math.pi))
         self.yaw.append(self.sim.get_local_orientation()[2] * (180 / math.pi))
 
@@ -66,7 +67,8 @@ class ReportGraphs:
         self.airspeed.append(self.sim[prp.airspeed] * 0.5925)
 
     def get_control_command(self):
-        self.aileron_combined.append(self.sim[prp.aileron_combined_rad] * (180.0 / math.pi))
+        self.aileron_combined.append(
+            self.sim[prp.aileron_combined_rad] * (180.0 / math.pi))
         self.elevator.append(self.sim[prp.elevator] * (180.0 / math.pi))
 
     def get_graph_info(self):
@@ -85,7 +87,8 @@ class ReportGraphs:
         plt.grid(True)
         points, = ax.plot([i[0] for i in desired_points], [i[1] for i in desired_points], marker='^',
                           color='#FF7F11', linestyle='None')
-        line, = ax.plot(self.lat_m, self.long_m, linestyle='--', color='#0077B6')
+        line, = ax.plot(self.lat_m, self.long_m,
+                        linestyle='--', color='#0077B6')
         line.set_label(r'track made good')
         points.set_label(r'commanded fly-by waypoints')
         ax.legend()
@@ -104,15 +107,16 @@ class ReportGraphs:
         ax1.set_xlabel(r'time[s]')
         ax1.set_ylabel(r'q')
         ax3 = ax1.twinx()
-        ax3.plot(self.time[start:stop], self.elevator[start:stop], linestyle='-', color=blue)
+        ax3.plot(self.time[start:stop],
+                 self.elevator[start:stop], linestyle='-', color=blue)
 
         ax2 = plt.subplot(212)
         # ax2.plot(self.time[start:stop], self.p[start:stop], linestyle='--', color=orange)
         ax2.set_title(r'\textbf{Pitch Response}')
         ax2.set_xlabel(r'time [s]')
         ax4 = ax2.twinx()
-        ax4.plot(self.time[start:stop], self.aileron_combined[start:stop], linestyle='-', color=blue)
-
+        ax4.plot(self.time[start:stop],
+                 self.aileron_combined[start:stop], linestyle='-', color=blue)
 
         # ax5 = plt.subplot(212)
         # plt.plot(self.time[start:stop], self.yaw[start:stop], linestyle='--', color=orange)

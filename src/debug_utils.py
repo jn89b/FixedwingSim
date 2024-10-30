@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
-#import src.jsbsim_properties as prp
-import jsbsim_backend.properties as prp
+# import src.jsbsim_properties as prp
+import src.jsbsim_backend.properties as prp
 import math
-from conversions import feet_to_meters, meters_to_feet, ktas_to_mps, mps_to_ktas
+from src.conversions import feet_to_meters, meters_to_feet, ktas_to_mps, mps_to_ktas
+
 
 class DebugGraphs:
     def __init__(self, sim):
@@ -19,7 +20,7 @@ class DebugGraphs:
         self.roll = []
         self.airspeed = []
         self.vs = []
-        
+
         self.x = []
         self.y = []
         self.z = []
@@ -105,10 +106,11 @@ class DebugGraphs:
 
     def get_airspeed(self):
         airspeed_ms = feet_to_meters(self.sim[prp.airspeed])
-        self.airspeed.append(airspeed_ms)  
-        #self.airspeed.append(self.sim[prp.airspeed])
+        self.airspeed.append(airspeed_ms)
+        # self.airspeed.append(self.sim[prp.airspeed])
         # self.airspeed.append(self.sim[prp.airspeed] * 0.5925)
-        self.vs.append(self.sim[prp.v_down_fps] * -1 * 60)  # multiplied to fpm from fps
+        # multiplied to fpm from fps
+        self.vs.append(self.sim[prp.v_down_fps] * -1 * 60)
 
     def pos_plot(self):
         fig, ax = plt.subplots()
@@ -227,7 +229,8 @@ class DebugFDM:
         print('Clalpha: ', self.sim[prp.Clalpha])
         print('Clq: ', self.sim[prp.Clq])
         print('ClDe: ', self.sim[prp.ClDe])
-        total_lift = self.sim[prp.Clo] + self.sim[prp.Clalpha] + self.sim[prp.Clq] + self.sim[prp.ClDe]
+        total_lift = self.sim[prp.Clo] + self.sim[prp.Clalpha] + \
+            self.sim[prp.Clq] + self.sim[prp.ClDe]
         print('Lift = ', total_lift)
 
     def get_roll_values(self):

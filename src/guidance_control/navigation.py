@@ -1,5 +1,5 @@
 import math
-import jsbsim_backend.properties as prp
+import src.jsbsim_backend.properties as prp
 # import src.jsbsim_properties as prp
 import statistics
 
@@ -12,7 +12,8 @@ class GlobalNavigation:
         self.tgt = self.set_target_pos(0, 0, 0)
 
     def set_current_pos(self):
-        self.cur = [self.sim[prp.lat_geod_deg], self.sim[prp.lng_geoc_deg], self.sim[prp.altitude_sl_ft]]
+        self.cur = [self.sim[prp.lat_geod_deg],
+                    self.sim[prp.lng_geoc_deg], self.sim[prp.altitude_sl_ft]]
         return self.cur
 
     def set_target_pos(self, target_lat, target_long, target_alt):
@@ -30,7 +31,8 @@ class GlobalNavigation:
         delta_lat = lat_tgt_rad - lat_cur_rad
         delta_long = long_tgt_rad - long_cur_rad
         a = (math.sin(delta_lat / 2) * math.sin(delta_lat / 2)) + \
-            (math.cos(lat_cur_rad) * math.cos(lat_tgt_rad) * math.sin(delta_long / 2) * math.sin(delta_long / 2))
+            (math.cos(lat_cur_rad) * math.cos(lat_tgt_rad) *
+             math.sin(delta_long / 2) * math.sin(delta_long / 2))
         c = math.atan2(math.sqrt(a), math.sqrt(1 - a))
         distance = earth_rad * c
         return distance
@@ -45,9 +47,11 @@ class GlobalNavigation:
         delta_long = long_tgt_rad - long_cur_rad
         y = math.sin(delta_long) * math.cos(lat_tgt_rad)
         x = (math.cos(lat_cur_rad) * math.sin(lat_tgt_rad)) - \
-            math.sin(lat_cur_rad) * math.cos(lat_tgt_rad) * math.cos(delta_long)
+            math.sin(lat_cur_rad) * math.cos(lat_tgt_rad) * \
+            math.cos(delta_long)
         theta = math.atan2(y, x)
-        bearing_deg = (theta * (180 / math.pi) + 360) % 360  # use modulo to get value as 360 deg
+        # use modulo to get value as 360 deg
+        bearing_deg = (theta * (180 / math.pi) + 360) % 360
         return bearing_deg
 
 
@@ -83,6 +87,7 @@ class LocalNavigation:
     unit_dir_vector(start_point, end_point)
         calculate the unitary direction vector between 2 2D points
     """
+
     def __init__(self, sim):
         self.sim = sim
         self.tgt: list = [0, 0]
@@ -111,7 +116,8 @@ class LocalNavigation:
         :return: current position
         """
         lat = 111320 * self.sim[prp.lat_geod_deg]
-        long = 40075000 * self.sim[prp.lng_geoc_deg] * math.cos(self.sim[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
+        long = 40075000 * self.sim[prp.lng_geoc_deg] * \
+            math.cos(self.sim[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
         cur = (lat, long)
         return cur
 
@@ -174,7 +180,8 @@ class LocalNavigation:
         :param end_point: track ending position
         :return: the normalized direction vector
         """
-        direction_vector = (end_point[0] - start_point[0], end_point[1] - start_point[1])
+        direction_vector = (
+            end_point[0] - start_point[0], end_point[1] - start_point[1])
         try:
             unit_vector_n = direction_vector[0] / math.sqrt(math.pow(direction_vector[0], 2)
                                                             + math.pow(direction_vector[1], 2))
@@ -255,7 +262,8 @@ class WindEstimation:
         :return: current position
         """
         lat = 111320 * self.sim[prp.lat_geod_deg]
-        long = 40075000 * self.sim[prp.lng_geoc_deg] * math.cos(self.sim[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
+        long = 40075000 * self.sim[prp.lng_geoc_deg] * \
+            math.cos(self.sim[prp.lat_geod_deg] * (math.pi / 180.0)) / 360
         self.cur = (lat, long)
         return self.cur
 
@@ -278,11 +286,14 @@ class WindEstimation:
         """
         self.old_cur = self.cur
         self.get_current_pos()
-        track_vector = (self.old_cur[0] - self.cur[0], self.old_cur[1] - self.cur[1])
-        self.track_angle = math.atan2(track_vector[1], track_vector[0]) - math.pi
+        track_vector = (self.old_cur[0] - self.cur[0],
+                        self.old_cur[1] - self.cur[1])
+        self.track_angle = math.atan2(
+            track_vector[1], track_vector[0]) - math.pi
         if self.track_angle < 0:
             self.track_angle = self.track_angle + (2 * math.pi)
-        self.ground_speed = math.sqrt(pow(track_vector[0], 2) + pow(track_vector[1], 2)) / self.dt
+        self.ground_speed = math.sqrt(
+            pow(track_vector[0], 2) + pow(track_vector[1], 2)) / self.dt
         print(self.cur, self.old_cur)
 
     def wind_components(self) -> tuple:
@@ -294,12 +305,14 @@ class WindEstimation:
         :return: wind tuple of 2 above variables
         """
         self.track()
-        print(self.airspeed, self.ground_speed, self.track_angle * (180 / math.pi), self.heading * (180 / math.pi))
+        print(self.airspeed, self.ground_speed, self.track_angle *
+              (180 / math.pi), self.heading * (180 / math.pi))
         wind_speed = math.sqrt(pow(self.airspeed, 2) + pow(self.ground_speed, 2) -
                                (2 * self.airspeed * self.ground_speed * math.cos(self.track_angle - self.heading)))
         try:
             wind_angle = math.pi + self.track_angle + \
-                         math.asin((self.airspeed * math.sin(self.track_angle - self.heading)) / wind_speed)
+                math.asin(
+                    (self.airspeed * math.sin(self.track_angle - self.heading)) / wind_speed)
         except ZeroDivisionError:
             wind_angle = 0.0
         if wind_angle > 2 * math.pi:
@@ -321,7 +334,8 @@ class WindEstimation:
         """
         wind = self.wind_components()
         self.wind_values.append(wind)  # is this memory efficient?
-        wind_sample = self.wind_values[-n:]  # slice the last n values of wind (default to 1000)
+        # slice the last n values of wind (default to 1000)
+        wind_sample = self.wind_values[-n:]
         # print(self.wind_values[-n:])
         return wind_sample
 
@@ -336,7 +350,8 @@ class WindEstimation:
         try:
             arithmetic_mean_speed = statistics.mean(wind_sample[0])
             arithmetic_mean_direction = statistics.mean(wind_sample[1])
-            arithmetic_mean_wind = (arithmetic_mean_speed, arithmetic_mean_direction)
+            arithmetic_mean_wind = (
+                arithmetic_mean_speed, arithmetic_mean_direction)
             return arithmetic_mean_wind
         except IndexError:
             arithmetic_mean_wind = (0, 0)
